@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - API_KEY=your-api-key-here
+    volumes:
+      - ./backend:/app
+  python-app:
+    build: ./python-app
+    environment:
+      - API_KEY=your-api-key-here
+      - DATABASE_URL=your-database-url
+    volumes:
+      - ./python-app:/app
