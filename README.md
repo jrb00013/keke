@@ -1,4 +1,4 @@
-# keke - A Specialized RTOS for Stock Market Integration and Datasheet Manipulation 📊🤖
+# keke - A Specialized RTOS for Stock Market Integration and Datasheet Manipulation 📊
 
 Implemented using Python, Cloud, AWS, and more.
 
