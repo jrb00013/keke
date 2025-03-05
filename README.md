@@ -1,6 +1,6 @@
 # keke - A Specialized RTOS for Stock Market Integration and Datasheet Manipulation 📊
 
-Implemented using Python, Cloud, AWS, and more.
+Implemented using Python, C, Node.js, and AWS Lambda.
 
 ## 🚀 Core Modules:
 - **RTOS Kernel**:
