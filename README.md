@@ -1,8 +1,8 @@
-# keke - A Specialized RTOS for Stock Market Integration and Datasheet Manipulation 📊
+# keke - A Specialized RTOS for Datasheet Manipulation 
 
 Implemented using Python, C, Node.js, and AWS Lambda.
 
-## 🚀 Core Modules:
+## Core Modules:
 - **RTOS Kernel**:
   - `rtos_kernel.c` & `rtos_kernel.h`: Core logic.
   - `scheduler.c`: Manages tasks.
@@ -21,12 +21,7 @@ Implemented using Python, C, Node.js, and AWS Lambda.
   - `docker-compose.yml`: For containerization.
   - `requirements.txt`: Lists Python dependencies.
 
-## 🚀 Quick Start:
-1. Clone the repository.
-2. Set up `.env` with your API keys.
-3. Use `docker-compose up` to start the server.
-
-## 📦 Requirements:
+## Requirements:
 - Python 3.x
 - Node.js
 - Docker
