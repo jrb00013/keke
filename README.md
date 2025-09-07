@@ -1,9 +1,4 @@
-# keke - A Lightweight RTOS Native Datasheet Manipulation App
+# keke - A Basic Lightweight RTOS Native Datasheet
 
 Implemented using Python, C, Node.js, and AWS Lambda.
 
-## Requirements:
-- Python 3.x
-- Node.js
-- Docker
-- AWS Account
