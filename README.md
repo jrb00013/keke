@@ -595,31 +595,9 @@ keke/
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Support
-
-For support and questions:
-- Create an issue on GitHub
-- Check the documentation
-- Review the API examples
-
-## Roadmap
-
-### Upcoming Features
-- Advanced data visualization
-- Enhanced machine learning integration
-- Real-time collaboration improvements
-- Advanced cloud storage integration
-- Extended formula functions
-- Data validation rules
-- Automated reporting
-- API rate limiting improvements
 
 ### Version History
 - **v1.0.0**: Initial release with core Excel processing features
 - **v1.1.0**: Added chart generation and advanced data cleaning
 - **v1.2.0**: Enhanced formula engine and batch processing
 - **v1.3.0**: AI assistant and machine learning integration
-
----
-
-**Keke** - Making Excel data processing simple, powerful, and efficient.
