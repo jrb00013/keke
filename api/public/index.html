@@ -769,6 +769,107 @@
         </div>
     </div>
 
+    <!-- Machine Learning Modal -->
+    <div id="mlModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Machine Learning Analysis</h3>
+                <span class="close" onclick="closeModal('mlModal')">&times;</span>
+            </div>
+            <div class="form-group">
+                <label>Select ML Analysis Type:</label>
+                <select id="mlAnalysisType" onchange="updateMLOptions()">
+                    <option value="">Choose analysis type</option>
+                    <option value="predict">Predict Values</option>
+                    <option value="cluster">Cluster Data</option>
+                    <option value="anomalies">Detect Anomalies</option>
+                    <option value="correlation">Correlation Analysis</option>
+                    <option value="recommendations">ML Recommendations</option>
+                </select>
+            </div>
+            
+            <div id="mlOptions" style="display: none;">
+                <!-- Prediction Options -->
+                <div id="predictionOptions" style="display: none;">
+                    <div class="form-group">
+                        <label for="targetColumn">Target Column (what to predict)</label>
+                        <select id="targetColumn">
+                            <option value="">Select target column</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="featureColumns">Feature Columns (inputs)</label>
+                        <select id="featureColumns" multiple>
+                            <option value="">Select feature columns</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="modelType">Model Type</label>
+                        <select id="modelType">
+                            <option value="auto">Auto (Recommended)</option>
+                            <option value="regression">Regression</option>
+                            <option value="classification">Classification</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Clustering Options -->
+                <div id="clusteringOptions" style="display: none;">
+                    <div class="form-group">
+                        <label for="clusterFeatures">Feature Columns</label>
+                        <select id="clusterFeatures" multiple>
+                            <option value="">Select feature columns</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="nClusters">Number of Clusters</label>
+                        <input type="number" id="nClusters" min="2" max="10" value="3">
+                    </div>
+                </div>
+                
+                <!-- Anomaly Detection Options -->
+                <div id="anomalyOptions" style="display: none;">
+                    <div class="form-group">
+                        <label for="anomalyFeatures">Feature Columns</label>
+                        <select id="anomalyFeatures" multiple>
+                            <option value="">Select feature columns</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="anomalyMethod">Detection Method</label>
+                        <select id="anomalyMethod">
+                            <option value="isolation_forest">Isolation Forest</option>
+                            <option value="dbscan">DBSCAN</option>
+                            <option value="statistical">Statistical</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Correlation Options -->
+                <div id="correlationOptions" style="display: none;">
+                    <div class="form-group">
+                        <label for="correlationColumns">Columns to Analyze</label>
+                        <select id="correlationColumns" multiple>
+                            <option value="">Select columns</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="btn-group">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('mlModal')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="runMLAnalysis()">Run Analysis</button>
+            </div>
+            
+            <div id="mlResults" style="display: none; margin-top: 20px;">
+                <div class="result-section">
+                    <div class="result-title">ML Analysis Results</div>
+                    <div id="mlResultsContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let currentSessionId = null;
@@ -1396,6 +1497,260 @@
                     document.body.removeChild(notification);
                 }, 300);
             }, 3000);
+        }
+
+        // Machine Learning functions
+        function showMLOptions() {
+            if (!currentSessionId || !currentFileInfo) return;
+            
+            populateMLColumns();
+            document.getElementById('mlModal').style.display = 'block';
+        }
+
+        function populateMLColumns() {
+            const sheetName = Object.keys(currentFileInfo.sheets)[0];
+            const columns = currentFileInfo.sheets[sheetName].column_names;
+            
+            // Populate all column selects
+            const selects = [
+                'targetColumn', 'featureColumns', 'clusterFeatures', 
+                'anomalyFeatures', 'correlationColumns'
+            ];
+            
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">Select columns</option>';
+                columns.forEach(col => {
+                    const option = document.createElement('option');
+                    option.value = col;
+                    option.textContent = col;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        function updateMLOptions() {
+            const analysisType = document.getElementById('mlAnalysisType').value;
+            const mlOptions = document.getElementById('mlOptions');
+            
+            // Hide all option divs
+            const optionDivs = [
+                'predictionOptions', 'clusteringOptions', 
+                'anomalyOptions', 'correlationOptions'
+            ];
+            optionDivs.forEach(divId => {
+                document.getElementById(divId).style.display = 'none';
+            });
+            
+            if (analysisType === 'recommendations') {
+                mlOptions.style.display = 'none';
+            } else if (analysisType) {
+                mlOptions.style.display = 'block';
+                document.getElementById(analysisType + 'Options').style.display = 'block';
+            } else {
+                mlOptions.style.display = 'none';
+            }
+        }
+
+        async function runMLAnalysis() {
+            const analysisType = document.getElementById('mlAnalysisType').value;
+            
+            if (!analysisType) {
+                showNotification('Please select an analysis type', 'error');
+                return;
+            }
+            
+            try {
+                showLoading();
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                let result;
+                
+                if (analysisType === 'predict') {
+                    const targetColumn = document.getElementById('targetColumn').value;
+                    const featureColumns = Array.from(document.getElementById('featureColumns').selectedOptions).map(option => option.value);
+                    const modelType = document.getElementById('modelType').value;
+                    
+                    if (!targetColumn || featureColumns.length === 0) {
+                        showNotification('Please select target and feature columns', 'error');
+                        return;
+                    }
+                    
+                    const response = await fetch(`/api/excel/${currentSessionId}/predict/${sheetName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            target_column: targetColumn,
+                            feature_columns: featureColumns,
+                            model_type: modelType
+                        })
+                    });
+                    
+                    result = await response.json();
+                    
+                } else if (analysisType === 'cluster') {
+                    const featureColumns = Array.from(document.getElementById('clusterFeatures').selectedOptions).map(option => option.value);
+                    const nClusters = parseInt(document.getElementById('nClusters').value);
+                    
+                    if (featureColumns.length === 0) {
+                        showNotification('Please select feature columns', 'error');
+                        return;
+                    }
+                    
+                    const response = await fetch(`/api/excel/${currentSessionId}/cluster/${sheetName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            feature_columns: featureColumns,
+                            n_clusters: nClusters
+                        })
+                    });
+                    
+                    result = await response.json();
+                    
+                } else if (analysisType === 'anomalies') {
+                    const featureColumns = Array.from(document.getElementById('anomalyFeatures').selectedOptions).map(option => option.value);
+                    const method = document.getElementById('anomalyMethod').value;
+                    
+                    if (featureColumns.length === 0) {
+                        showNotification('Please select feature columns', 'error');
+                        return;
+                    }
+                    
+                    const response = await fetch(`/api/excel/${currentSessionId}/anomalies/${sheetName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            feature_columns: featureColumns,
+                            method: method
+                        })
+                    });
+                    
+                    result = await response.json();
+                    
+                } else if (analysisType === 'correlation') {
+                    const columns = Array.from(document.getElementById('correlationColumns').selectedOptions).map(option => option.value);
+                    
+                    if (columns.length < 2) {
+                        showNotification('Please select at least 2 columns', 'error');
+                        return;
+                    }
+                    
+                    const response = await fetch(`/api/excel/${currentSessionId}/correlation/${sheetName}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ columns: columns })
+                    });
+                    
+                    result = await response.json();
+                    
+                } else if (analysisType === 'recommendations') {
+                    const response = await fetch(`/api/excel/${currentSessionId}/ml-recommendations/${sheetName}`);
+                    result = await response.json();
+                }
+                
+                if (result.success) {
+                    displayMLResults(result, analysisType);
+                    showNotification('ML analysis completed successfully!', 'success');
+                } else {
+                    showError(result.error.message || 'ML analysis failed');
+                }
+                
+            } catch (error) {
+                showError('ML analysis failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayMLResults(result, analysisType) {
+            const resultsDiv = document.getElementById('mlResults');
+            const contentDiv = document.getElementById('mlResultsContent');
+            
+            let html = '';
+            
+            if (analysisType === 'predict') {
+                const prediction = result.prediction;
+                html = `
+                    <div class="info-item">
+                        <span class="info-label">Model Type:</span>
+                        <span class="info-value">${prediction.model_type}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Accuracy:</span>
+                        <span class="info-value">${(prediction.accuracy * 100).toFixed(2)}%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Train Score:</span>
+                        <span class="info-value">${(prediction.model_performance.train_score * 100).toFixed(2)}%</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Test Score:</span>
+                        <span class="info-value">${(prediction.model_performance.test_score * 100).toFixed(2)}%</span>
+                    </div>
+                `;
+                
+            } else if (analysisType === 'cluster') {
+                const clustering = result.clustering;
+                html = `
+                    <div class="info-item">
+                        <span class="info-label">Algorithm:</span>
+                        <span class="info-value">${clustering.algorithm}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Number of Clusters:</span>
+                        <span class="info-value">${clustering.n_clusters}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Silhouette Score:</span>
+                        <span class="info-value">${clustering.silhouette_score.toFixed(3)}</span>
+                    </div>
+                `;
+                
+            } else if (analysisType === 'anomalies') {
+                const anomalies = result.anomalies;
+                html = `
+                    <div class="info-item">
+                        <span class="info-label">Method:</span>
+                        <span class="info-value">${anomalies.method}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Anomalies Found:</span>
+                        <span class="info-value">${anomalies.anomaly_count}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Anomaly Percentage:</span>
+                        <span class="info-value">${anomalies.anomaly_percentage.toFixed(2)}%</span>
+                    </div>
+                `;
+                
+            } else if (analysisType === 'correlation') {
+                const correlation = result.correlation;
+                html = `
+                    <div class="info-item">
+                        <span class="info-label">Strong Correlations:</span>
+                        <span class="info-value">${correlation.strong_correlations.length} found</span>
+                    </div>
+                `;
+                
+                correlation.strong_correlations.forEach(corr => {
+                    html += `
+                        <div class="info-item">
+                            <span class="info-label">${corr.column1} ↔ ${corr.column2}:</span>
+                            <span class="info-value">${corr.correlation.toFixed(3)}</span>
+                        </div>
+                    `;
+                });
+                
+            } else if (analysisType === 'recommendations') {
+                const recommendations = result.recommendations;
+                html = '<div class="info-item"><span class="info-label">Recommendations:</span></div>';
+                recommendations.forEach(rec => {
+                    html += `<div style="margin: 10px 0; padding: 10px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">${rec}</div>`;
+                });
+            }
+            
+            contentDiv.innerHTML = html;
+            resultsDiv.style.display = 'block';
         }
     </script>
 </body>
