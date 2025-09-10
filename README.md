@@ -2,68 +2,68 @@
 
 Keke is a cutting-edge, AI-powered web-based tool designed to revolutionize Excel functionality with advanced data processing, machine learning, and intelligent analysis capabilities. It provides a modern interface for working with Excel files, CSV data, and JSON files, enhanced with artificial intelligence for smarter data insights.
 
-## 🚀 Key Features
+## Key Features
 
-### 🤖 AI-Powered Capabilities
+### AI-Powered Capabilities
 - **Natural Language Queries**: Ask questions about your data in plain English
 - **AI Data Analysis**: Intelligent insights and pattern recognition
 - **Smart Data Cleaning**: AI-driven recommendations for data quality improvements
 - **Automated Visualization**: AI suggests the best charts and graphs for your data
 - **Predictive Analytics**: Machine learning models for forecasting and classification
 
-### 📊 Advanced Data Processing
+### Advanced Data Processing
 - **Multi-format Support**: Excel (.xlsx, .xls), CSV, JSON, Parquet
 - **Real-time Collaboration**: Multiple users can work on the same dataset simultaneously
 - **Cloud Integration**: Seamless integration with AWS S3, Google Drive, Dropbox
 - **Batch Processing**: Handle multiple files simultaneously
 - **Advanced Formulas**: Excel-like formula engine with AI enhancements
 
-### 🔧 Enterprise Features
+### Enterprise Features
 - **Scalable Architecture**: Kubernetes-ready with auto-scaling
 - **Comprehensive Monitoring**: Prometheus and Grafana integration
 - **Security**: JWT authentication, rate limiting, data encryption
 - **CI/CD Pipeline**: Automated testing and deployment
 - **Multi-environment Support**: Development, staging, and production deployments
 
-## Features
+## Core Features
 
-### 📊 Data Analysis
+### Data Analysis
 - Comprehensive data analysis with statistics and quality metrics
 - Pattern detection including outliers and correlations
 - Data type analysis and recommendations
 - Memory usage optimization insights
 
-### 🧹 Data Cleaning
+### Data Cleaning
 - Remove duplicates and empty rows
 - Handle missing values with multiple strategies
 - Data type conversion and validation
 - Column renaming and restructuring
 
-### 📈 Chart Generation
+### Chart Generation
 - Create professional charts (Bar, Line, Pie)
 - Customizable chart styling and formatting
 - Export charts as Excel files
 - Multiple chart types support
 
-### 📤 Export Options
+### Export Options
 - Export data in multiple formats: CSV, JSON, Excel, Parquet
 - Batch processing for multiple files
 - Custom export configurations
 - High-performance data serialization
 
-### ⚡ Formula Engine
+### Formula Engine
 - Excel-like formula evaluation
 - Support for common functions (SUM, AVERAGE, COUNT)
 - Arithmetic operations between cells
 - Custom formula application
 
-### 🔄 Batch Processing
+### Batch Processing
 - Process multiple files simultaneously
 - Parallel processing for efficiency
 - Progress tracking and error handling
 - Bulk operations support
 
-## 🛠️ Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 - **Node.js** 18+ 
@@ -108,7 +108,7 @@ Keke is a cutting-edge, AI-powered web-based tool designed to revolutionize Exce
    python3 run.py start --mode app-only
    ```
 
-### 🐳 Docker Deployment
+### Docker Deployment
 
 ```bash
 # Build Docker image
@@ -121,7 +121,7 @@ docker-compose up -d
 docker-compose ps
 ```
 
-### ☸️ Kubernetes Deployment
+### Kubernetes Deployment
 
 ```bash
 # Deploy to development
@@ -137,7 +137,7 @@ docker-compose ps
 ./scripts/deploy.sh rollback
 ```
 
-### 🔧 Manual Setup
+### Manual Setup
 
 1. **Install Node.js dependencies**
    ```bash
@@ -161,7 +161,7 @@ docker-compose ps
    export DATABASE_URL="postgresql://user:pass@localhost:5432/keke"
    ```
 
-## 🚀 Usage
+## Usage
 
 ### Starting the Server
 
@@ -271,11 +271,35 @@ Content-Type: application/json
 }
 ```
 
+#### Machine Learning Predictions
+```http
+POST /api/excel/{sessionId}/predict/{sheetName}
+Content-Type: application/json
+
+{
+  "target_column": "Sales",
+  "feature_columns": ["Price", "Marketing", "Season"],
+  "model_type": "auto"
+}
+```
+
+#### AI Query Processing
+```http
+POST /api/ai/query/{sessionId}/{sheetName}
+Content-Type: application/json
+
+{
+  "query": "What are the main trends in this data?",
+  "context": {}
+}
+```
+
 ## Supported File Formats
 
 - **Excel**: .xlsx, .xls
 - **CSV**: .csv (with automatic delimiter detection)
 - **JSON**: .json (arrays of objects or single objects)
+- **Parquet**: .parquet (for high-performance data processing)
 
 ## Data Cleaning Operations
 
@@ -368,6 +392,26 @@ Content-Type: application/json
 - `A1*B1`: Multiplication
 - `A1/B1`: Division
 
+## Machine Learning Features
+
+### Predictive Models
+- **Auto Model Selection**: Automatically chooses the best model for your data
+- **Supported Models**: Linear Regression, Random Forest, XGBoost, LightGBM
+- **Cross-validation**: Comprehensive model evaluation
+- **Feature Importance**: Analysis of which features matter most
+
+### Clustering
+- **K-Means Clustering**: Group similar data points
+- **Hierarchical Clustering**: Tree-based clustering
+- **DBSCAN**: Density-based clustering
+- **Auto Parameter Tuning**: Automatic selection of optimal parameters
+
+### Data Validation
+- **Statistical Validation**: Comprehensive data quality checks
+- **Custom Rules**: Define your own validation rules
+- **Anomaly Detection**: Identify outliers and unusual patterns
+- **Data Profiling**: Detailed analysis of data characteristics
+
 ## Performance Considerations
 
 - **File Size**: Recommended maximum 50MB per file
@@ -387,7 +431,14 @@ The API provides comprehensive error handling with:
 
 ### Running Tests
 ```bash
+# Run all tests
+python3 run.py test
+
+# Run Node.js tests
 npm test
+
+# Run Python tests
+pytest
 ```
 
 ### Linting
@@ -404,6 +455,133 @@ npm run format
 ```bash
 pytest
 ```
+
+## Project Structure
+
+```
+keke/
+├── api/                    # API endpoints and server code
+│   ├── server.js          # Main Express server
+│   ├── api_routes.js      # API route definitions
+│   ├── excel_processor.py # Core Excel processing logic
+│   ├── assistant.py       # AI assistant functionality
+│   ├── ml_processor.py    # Machine learning processing
+│   ├── security.py        # Security utilities
+│   ├── cloud_services.py  # Cloud storage integration
+│   └── public/            # Static web interface
+├── k8s/                   # Kubernetes deployment manifests
+├── monitoring/            # Monitoring configuration
+├── scripts/               # Deployment and utility scripts
+├── tests/                 # Test suites
+├── run.py                 # Main startup script
+├── docker-compose.yml     # Docker Compose configuration
+├── Dockerfile            # Docker image definition
+├── requirements.txt      # Python dependencies
+├── package.json         # Node.js dependencies
+└── env.example         # Environment configuration template
+```
+
+## Configuration
+
+### Environment Variables
+
+#### Application Configuration
+- `KEKE_ENV`: Environment (development, staging, production)
+- `HOST`: Server host (default: localhost)
+- `PORT`: Server port (default: 3000)
+- `DEBUG`: Enable debug mode
+
+#### AI Configuration
+- `AI_ENABLED`: Enable AI features
+- `OPENAI_API_KEY`: OpenAI API key
+- `ANTHROPIC_API_KEY`: Anthropic Claude API key
+
+#### Database Configuration
+- `DATABASE_URL`: Primary database connection string
+- `REDIS_URL`: Redis connection string
+- `MONGODB_URL`: MongoDB connection string
+- `POSTGRES_URL`: PostgreSQL connection string
+
+#### Cloud Storage Configuration
+- `AWS_ACCESS_KEY_ID`: AWS access key
+- `AWS_SECRET_ACCESS_KEY`: AWS secret key
+- `AWS_REGION`: AWS region
+- `AZURE_STORAGE_CONNECTION_STRING`: Azure storage connection
+- `GOOGLE_APPLICATION_CREDENTIALS`: Google Cloud credentials
+
+#### Security Configuration
+- `JWT_SECRET`: JWT signing secret
+- `ENCRYPTION_KEY`: Data encryption key
+- `ALLOWED_ORIGINS`: CORS allowed origins
+- `RATE_LIMIT`: API rate limit
+- `RATE_WINDOW`: Rate limit window
+
+#### Performance Configuration
+- `MAX_FILE_SIZE`: Maximum file size in bytes
+- `WORKER_PROCESSES`: Number of worker processes
+- `MAX_MEMORY_USAGE`: Memory limit
+- `CACHE_TTL`: Cache time-to-live
+
+### Feature Flags
+- `FEATURE_AI_ASSISTANT`: Enable AI assistant
+- `FEATURE_MACHINE_LEARNING`: Enable ML features
+- `FEATURE_CLOUD_STORAGE`: Enable cloud storage
+- `FEATURE_COLLABORATION`: Enable real-time collaboration
+- `FEATURE_ADVANCED_ANALYTICS`: Enable advanced analytics
+
+## Security
+
+### Authentication & Authorization
+- JWT-based authentication
+- Role-based access control
+- API rate limiting
+- CORS configuration
+
+### Data Protection
+- Encryption at rest and in transit
+- Secure secret management
+- Input validation and sanitization
+- SQL injection prevention
+
+### Infrastructure Security
+- Non-root containers
+- Network policies
+- Pod security policies
+- Regular security scanning
+
+## Monitoring & Observability
+
+### Prometheus Metrics
+- Application performance metrics
+- Custom business metrics
+- Kubernetes cluster metrics
+- Database performance metrics
+
+### Grafana Dashboards
+- Application health monitoring
+- Performance analytics
+- Error tracking and alerting
+- Resource utilization
+
+### Logging
+- Structured JSON logging
+- Centralized log aggregation
+- Error tracking and debugging
+- Performance monitoring
+
+## Scalability
+
+### Horizontal Scaling
+- Kubernetes HPA for automatic scaling
+- Load balancer configuration
+- Multi-replica deployments
+- Database connection pooling
+
+### Performance Optimization
+- Caching strategies (Redis)
+- CDN integration
+- Resource optimization
+- Database indexing
 
 ## Contributing
 
@@ -427,19 +605,20 @@ For support and questions:
 ## Roadmap
 
 ### Upcoming Features
-- [ ] Advanced data visualization
-- [ ] Machine learning integration
-- [ ] Real-time collaboration
-- [ ] Cloud storage integration
-- [ ] Advanced formula functions
-- [ ] Data validation rules
-- [ ] Automated reporting
-- [ ] API rate limiting improvements
+- Advanced data visualization
+- Enhanced machine learning integration
+- Real-time collaboration improvements
+- Advanced cloud storage integration
+- Extended formula functions
+- Data validation rules
+- Automated reporting
+- API rate limiting improvements
 
 ### Version History
 - **v1.0.0**: Initial release with core Excel processing features
 - **v1.1.0**: Added chart generation and advanced data cleaning
 - **v1.2.0**: Enhanced formula engine and batch processing
+- **v1.3.0**: AI assistant and machine learning integration
 
 ---
 
