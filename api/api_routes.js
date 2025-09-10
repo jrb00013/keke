@@ -457,6 +457,103 @@ router.get('/excel/:sessionId/ml-recommendations/:sheetName',
     }
 );
 
+// AI Assistant Endpoints
+
+// Process natural language query
+router.post('/ai/query/:sessionId/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('query').isLength({ min: 1 }).withMessage('Query is required'),
+    body('context').optional().isObject().withMessage('Context must be an object'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { query, context } = req.body;
+            
+            const result = await processAIQuery(sessionId, sheetName, query, context);
+            
+            res.json({
+                success: true,
+                ai_response: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Get AI-powered data insights
+router.get('/ai/insights/:sessionId/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            
+            const result = await getAIInsights(sessionId, sheetName);
+            
+            res.json({
+                success: true,
+                insights: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Get AI-powered data cleaning suggestions
+router.get('/ai/cleaning-suggestions/:sessionId/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            
+            const result = await getAICleaningSuggestions(sessionId, sheetName);
+            
+            res.json({
+                success: true,
+                cleaning_suggestions: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Get AI-powered visualization suggestions
+router.get('/ai/visualization-suggestions/:sessionId/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            
+            const result = await getAIVisualizationSuggestions(sessionId, sheetName);
+            
+            res.json({
+                success: true,
+                visualization_suggestions: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 // Cloud Storage Endpoints
 
 // Get cloud storage status
@@ -1718,6 +1815,155 @@ async function getUserCollaborationSessions(userId) {
                 reject(new Error(`Python process failed: ${error}`));
             }
         });
+    });
+}
+
+// AI Assistant helper functions
+async function processAIQuery(sessionId, sheetName, query, context) {
+    return new Promise((resolve, reject) => {
+        // First get the data preview
+        getDataPreview(sessionId, sheetName, 1000).then(previewData => {
+            const python = spawn('python3', [
+                path.join(__dirname, 'ai_assistant.py'),
+                query,
+                JSON.stringify(previewData)
+            ]);
+            
+            let output = '';
+            let error = '';
+            
+            python.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+            
+            python.stderr.on('data', (data) => {
+                error += data.toString();
+            });
+            
+            python.on('close', (code) => {
+                if (code === 0) {
+                    try {
+                        const result = JSON.parse(output);
+                        resolve(result);
+                    } catch (parseError) {
+                        reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                    }
+                } else {
+                    reject(new Error(`Python process failed: ${error}`));
+                }
+            });
+        }).catch(reject);
+    });
+}
+
+async function getAIInsights(sessionId, sheetName) {
+    return new Promise((resolve, reject) => {
+        // First get the data preview
+        getDataPreview(sessionId, sheetName, 1000).then(previewData => {
+            const python = spawn('python3', [
+                path.join(__dirname, 'ai_assistant.py'),
+                'Generate insights about this data',
+                JSON.stringify(previewData)
+            ]);
+            
+            let output = '';
+            let error = '';
+            
+            python.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+            
+            python.stderr.on('data', (data) => {
+                error += data.toString();
+            });
+            
+            python.on('close', (code) => {
+                if (code === 0) {
+                    try {
+                        const result = JSON.parse(output);
+                        resolve(result);
+                    } catch (parseError) {
+                        reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                    }
+                } else {
+                    reject(new Error(`Python process failed: ${error}`));
+                }
+            });
+        }).catch(reject);
+    });
+}
+
+async function getAICleaningSuggestions(sessionId, sheetName) {
+    return new Promise((resolve, reject) => {
+        // First get the data preview
+        getDataPreview(sessionId, sheetName, 1000).then(previewData => {
+            const python = spawn('python3', [
+                path.join(__dirname, 'ai_assistant.py'),
+                'What data cleaning suggestions do you have for this dataset?',
+                JSON.stringify(previewData)
+            ]);
+            
+            let output = '';
+            let error = '';
+            
+            python.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+            
+            python.stderr.on('data', (data) => {
+                error += data.toString();
+            });
+            
+            python.on('close', (code) => {
+                if (code === 0) {
+                    try {
+                        const result = JSON.parse(output);
+                        resolve(result);
+                    } catch (parseError) {
+                        reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                    }
+                } else {
+                    reject(new Error(`Python process failed: ${error}`));
+                }
+            });
+        }).catch(reject);
+    });
+}
+
+async function getAIVisualizationSuggestions(sessionId, sheetName) {
+    return new Promise((resolve, reject) => {
+        // First get the data preview
+        getDataPreview(sessionId, sheetName, 1000).then(previewData => {
+            const python = spawn('python3', [
+                path.join(__dirname, 'ai_assistant.py'),
+                'What visualizations would be best for this data?',
+                JSON.stringify(previewData)
+            ]);
+            
+            let output = '';
+            let error = '';
+            
+            python.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+            
+            python.stderr.on('data', (data) => {
+                error += data.toString();
+            });
+            
+            python.on('close', (code) => {
+                if (code === 0) {
+                    try {
+                        const result = JSON.parse(output);
+                        resolve(result);
+                    } catch (parseError) {
+                        reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                    }
+                } else {
+                    reject(new Error(`Python process failed: ${error}`));
+                }
+            });
+        }).catch(reject);
     });
 }
 
