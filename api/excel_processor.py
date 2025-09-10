@@ -803,3 +803,138 @@ class ExcelProcessor:
         }
         
         return results
+
+
+if __name__ == "__main__":
+    import sys
+    
+    if len(sys.argv) < 2:
+        print("Usage: python excel_processor.py <command> [args...]")
+        sys.exit(1)
+    
+    command = sys.argv[1]
+    processor = ExcelProcessor()
+    
+    try:
+        if command == "load_file":
+            if len(sys.argv) < 3:
+                print("Usage: python excel_processor.py load_file <file_path>")
+                sys.exit(1)
+            
+            file_path = sys.argv[2]
+            result = processor.load_file(file_path)
+            print(json.dumps(result, indent=2))
+            
+        elif command == "analyze_data":
+            if len(sys.argv) < 4:
+                print("Usage: python excel_processor.py analyze_data <session_id> <sheet_name>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            result = processor.analyze_data(sheet_name)
+            print(json.dumps(result, indent=2))
+            
+        elif command == "clean_data":
+            if len(sys.argv) < 5:
+                print("Usage: python excel_processor.py clean_data <session_id> <sheet_name> <operations_json>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            operations = json.loads(sys.argv[4])
+            result = processor.clean_data(sheet_name, operations)
+            print(json.dumps(result, indent=2))
+            
+        elif command == "create_chart":
+            if len(sys.argv) < 5:
+                print("Usage: python excel_processor.py create_chart <session_id> <sheet_name> <chart_config_json>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            chart_config = json.loads(sys.argv[4])
+            result = processor.create_chart(sheet_name, chart_config)
+            print(result)
+            
+        elif command == "export_data":
+            if len(sys.argv) < 5:
+                print("Usage: python excel_processor.py export_data <session_id> <sheet_name> <format>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            format_type = sys.argv[4]
+            result = processor.export_data(sheet_name, format_type)
+            print(result)
+            
+        elif command == "apply_formulas":
+            if len(sys.argv) < 5:
+                print("Usage: python excel_processor.py apply_formulas <session_id> <sheet_name> <formulas_json>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            formulas = json.loads(sys.argv[4])
+            result = processor.apply_formulas(sheet_name, formulas)
+            print(json.dumps(result, indent=2))
+            
+        elif command == "get_summary":
+            if len(sys.argv) < 3:
+                print("Usage: python excel_processor.py get_summary <session_id>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            result = processor.get_summary()
+            print(json.dumps(result, indent=2))
+            
+        elif command == "get_preview":
+            if len(sys.argv) < 5:
+                print("Usage: python excel_processor.py get_preview <session_id> <sheet_name> <limit>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            limit = int(sys.argv[4])
+            result = processor.get_preview(sheet_name, limit)
+            print(json.dumps(result, indent=2))
+            
+        elif command == "get_columns":
+            if len(sys.argv) < 4:
+                print("Usage: python excel_processor.py get_columns <session_id> <sheet_name>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            result = processor.get_columns(sheet_name)
+            print(json.dumps(result, indent=2))
+            
+        elif command == "validate_data":
+            if len(sys.argv) < 5:
+                print("Usage: python excel_processor.py validate_data <session_id> <sheet_name> <rules_json>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            rules = json.loads(sys.argv[4])
+            result = processor.validate_data(sheet_name, rules)
+            print(json.dumps(result, indent=2))
+            
+        elif command == "transform_data":
+            if len(sys.argv) < 5:
+                print("Usage: python excel_processor.py transform_data <session_id> <sheet_name> <transformations_json>")
+                sys.exit(1)
+            
+            session_id = sys.argv[2]
+            sheet_name = sys.argv[3]
+            transformations = json.loads(sys.argv[4])
+            result = processor.transform_data(sheet_name, transformations)
+            print(json.dumps(result, indent=2))
+            
+        else:
+            print(f"Unknown command: {command}")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"Error: {str(e)}", file=sys.stderr)
+        sys.exit(1)
