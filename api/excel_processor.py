@@ -563,3 +563,243 @@ class ExcelProcessor:
             summary['total_memory_usage'] += df.memory_usage(deep=True).sum()
         
         return summary
+    
+    def get_preview(self, sheet_name: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Get a preview of the data in a sheet
+        """
+        if sheet_name not in self.dataframes:
+            raise ValueError(f"Sheet '{sheet_name}' not found")
+        
+        df = self.dataframes[sheet_name]
+        
+        # Get first 'limit' rows
+        preview_df = df.head(limit)
+        
+        # Convert to list of dictionaries
+        return preview_df.to_dict('records')
+    
+    def get_columns(self, sheet_name: str) -> Dict[str, Any]:
+        """
+        Get detailed information about columns in a sheet
+        """
+        if sheet_name not in self.dataframes:
+            raise ValueError(f"Sheet '{sheet_name}' not found")
+        
+        df = self.dataframes[sheet_name]
+        
+        column_info = {}
+        for col in df.columns:
+            col_data = df[col]
+            column_info[col] = {
+                'data_type': str(col_data.dtype),
+                'null_count': col_data.isnull().sum(),
+                'null_percentage': (col_data.isnull().sum() / len(df)) * 100,
+                'unique_count': col_data.nunique(),
+                'unique_percentage': (col_data.nunique() / len(df)) * 100,
+                'sample_values': col_data.dropna().head(5).tolist()
+            }
+            
+            # Add statistical info for numeric columns
+            if pd.api.types.is_numeric_dtype(col_data):
+                column_info[col].update({
+                    'min': col_data.min(),
+                    'max': col_data.max(),
+                    'mean': col_data.mean(),
+                    'median': col_data.median(),
+                    'std': col_data.std()
+                })
+        
+        return column_info
+    
+    def validate_data(self, sheet_name: str, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Validate data based on specified rules
+        """
+        if sheet_name not in self.dataframes:
+            raise ValueError(f"Sheet '{sheet_name}' not found")
+        
+        df = self.dataframes[sheet_name]
+        validation_results = {
+            'total_rows': len(df),
+            'rules_applied': [],
+            'violations': [],
+            'summary': {
+                'passed': 0,
+                'failed': 0,
+                'total_checks': 0
+            }
+        }
+        
+        for rule in rules:
+            rule_type = rule.get('type')
+            params = rule.get('params', {})
+            
+            if rule_type == 'not_null':
+                columns = params.get('columns', [])
+                for col in columns:
+                    if col in df.columns:
+                        null_count = df[col].isnull().sum()
+                        validation_results['total_checks'] += 1
+                        if null_count == 0:
+                            validation_results['summary']['passed'] += 1
+                        else:
+                            validation_results['summary']['failed'] += 1
+                            validation_results['violations'].append({
+                                'rule': f'Column {col} should not be null',
+                                'column': col,
+                                'violation_count': null_count,
+                                'violation_percentage': (null_count / len(df)) * 100
+                            })
+            
+            elif rule_type == 'unique':
+                columns = params.get('columns', [])
+                for col in columns:
+                    if col in df.columns:
+                        duplicate_count = df[col].duplicated().sum()
+                        validation_results['total_checks'] += 1
+                        if duplicate_count == 0:
+                            validation_results['summary']['passed'] += 1
+                        else:
+                            validation_results['summary']['failed'] += 1
+                            validation_results['violations'].append({
+                                'rule': f'Column {col} should be unique',
+                                'column': col,
+                                'violation_count': duplicate_count,
+                                'violation_percentage': (duplicate_count / len(df)) * 100
+                            })
+            
+            elif rule_type == 'range':
+                column = params.get('column')
+                min_val = params.get('min')
+                max_val = params.get('max')
+                
+                if column in df.columns and pd.api.types.is_numeric_dtype(df[column]):
+                    violations = df[(df[column] < min_val) | (df[column] > max_val)]
+                    violation_count = len(violations)
+                    validation_results['total_checks'] += 1
+                    
+                    if violation_count == 0:
+                        validation_results['summary']['passed'] += 1
+                    else:
+                        validation_results['summary']['failed'] += 1
+                        validation_results['violations'].append({
+                            'rule': f'Column {column} should be between {min_val} and {max_val}',
+                            'column': column,
+                            'violation_count': violation_count,
+                            'violation_percentage': (violation_count / len(df)) * 100
+                        })
+            
+            elif rule_type == 'pattern':
+                column = params.get('column')
+                pattern = params.get('pattern')
+                
+                if column in df.columns:
+                    # Convert to string for pattern matching
+                    str_col = df[column].astype(str)
+                    violations = ~str_col.str.match(pattern, na=False)
+                    violation_count = violations.sum()
+                    validation_results['total_checks'] += 1
+                    
+                    if violation_count == 0:
+                        validation_results['summary']['passed'] += 1
+                    else:
+                        validation_results['summary']['failed'] += 1
+                        validation_results['violations'].append({
+                            'rule': f'Column {column} should match pattern {pattern}',
+                            'column': column,
+                            'violation_count': violation_count,
+                            'violation_percentage': (violation_count / len(df)) * 100
+                        })
+            
+            validation_results['rules_applied'].append(rule_type)
+        
+        return validation_results
+    
+    def transform_data(self, sheet_name: str, transformations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Apply data transformations to a sheet
+        """
+        if sheet_name not in self.dataframes:
+            raise ValueError(f"Sheet '{sheet_name}' not found")
+        
+        df = self.dataframes[sheet_name].copy()
+        original_shape = df.shape
+        
+        results = {
+            'original_shape': original_shape,
+            'transformations_applied': [],
+            'final_shape': None,
+            'changes_summary': {}
+        }
+        
+        for transformation in transformations:
+            trans_type = transformation.get('type')
+            params = transformation.get('params', {})
+            
+            if trans_type == 'pivot':
+                index_cols = params.get('index', [])
+                columns_col = params.get('columns')
+                values_cols = params.get('values', [])
+                agg_func = params.get('aggfunc', 'sum')
+                
+                if index_cols and columns_col and values_cols:
+                    df = df.pivot_table(
+                        index=index_cols,
+                        columns=columns_col,
+                        values=values_cols,
+                        aggfunc=agg_func
+                    )
+                    results['transformations_applied'].append('pivot')
+            
+            elif trans_type == 'groupby':
+                group_cols = params.get('groupby', [])
+                agg_dict = params.get('aggregations', {})
+                
+                if group_cols and agg_dict:
+                    df = df.groupby(group_cols).agg(agg_dict).reset_index()
+                    results['transformations_applied'].append('groupby')
+            
+            elif trans_type == 'merge':
+                other_sheet = params.get('other_sheet')
+                merge_keys = params.get('keys', [])
+                merge_type = params.get('type', 'inner')
+                
+                if other_sheet in self.dataframes and merge_keys:
+                    other_df = self.dataframes[other_sheet]
+                    df = df.merge(other_df, on=merge_keys, how=merge_type)
+                    results['transformations_applied'].append('merge')
+            
+            elif trans_type == 'concat':
+                other_sheets = params.get('other_sheets', [])
+                axis = params.get('axis', 0)  # 0 for rows, 1 for columns
+                
+                other_dfs = [self.dataframes[sheet] for sheet in other_sheets if sheet in self.dataframes]
+                if other_dfs:
+                    df = pd.concat([df] + other_dfs, axis=axis)
+                    results['transformations_applied'].append('concat')
+            
+            elif trans_type == 'sort':
+                sort_cols = params.get('columns', [])
+                ascending = params.get('ascending', True)
+                
+                if sort_cols:
+                    df = df.sort_values(by=sort_cols, ascending=ascending)
+                    results['transformations_applied'].append('sort')
+            
+            elif trans_type == 'filter':
+                condition = params.get('condition')
+                
+                if condition:
+                    df = df.query(condition)
+                    results['transformations_applied'].append('filter')
+        
+        # Update the dataframe
+        self.dataframes[sheet_name] = df
+        results['final_shape'] = df.shape
+        results['changes_summary'] = {
+            'rows_changed': original_shape[0] - df.shape[0],
+            'columns_changed': original_shape[1] - df.shape[1]
+        }
+        
+        return results
