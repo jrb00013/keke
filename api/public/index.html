@@ -108,6 +108,243 @@
             margin-top: 40px;
         }
 
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .data-table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table tr:hover {
+            background: #f8f9ff;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .chart-controls select,
+        .chart-controls input {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .chart-controls select:focus,
+        .chart-controls input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .chart-canvas {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: #333;
+            margin: 0;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover {
+            color: #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #6c757d;
+            border: 2px solid #e0e0e0;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            z-index: 1001;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+        }
+
+        .notification.error {
+            background: linear-gradient(135deg, #d63031 0%, #c0392b 100%);
+        }
+
+        .notification.info {
+            background: linear-gradient(135deg, #0984e3 0%, #0770c4 100%);
+        }
+
         .feature-card {
             background: #f8f9ff;
             border-radius: 15px;
@@ -317,12 +554,14 @@
             </div>
 
             <div class="actions" id="actions" style="display: none;">
-                <button class="action-btn" onclick="analyzeData()">Analyze Data</button>
-                <button class="action-btn" onclick="showCleanOptions()">Clean Data</button>
-                <button class="action-btn" onclick="showChartOptions()">Create Chart</button>
-                <button class="action-btn" onclick="exportData('csv')">Export CSV</button>
-                <button class="action-btn" onclick="exportData('json')">Export JSON</button>
-                <button class="action-btn" onclick="exportData('excel')">Export Excel</button>
+                <button class="action-btn" onclick="analyzeData()">📊 Analyze Data</button>
+                <button class="action-btn" onclick="showCleanOptions()">🧹 Clean Data</button>
+                <button class="action-btn" onclick="showChartOptions()">📈 Create Chart</button>
+                <button class="action-btn" onclick="showFormulaModal()">⚡ Apply Formulas</button>
+                <button class="action-btn" onclick="showDataPreview()">👁️ Preview Data</button>
+                <button class="action-btn" onclick="exportData('csv')">📤 Export CSV</button>
+                <button class="action-btn" onclick="exportData('json')">📤 Export JSON</button>
+                <button class="action-btn" onclick="exportData('excel')">📤 Export Excel</button>
             </div>
 
             <div class="results" id="results"></div>
@@ -374,6 +613,162 @@
         </div>
     </div>
 
+    <!-- Data Preview Modal -->
+    <div id="dataPreviewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Data Preview</h3>
+                <span class="close" onclick="closeModal('dataPreviewModal')">&times;</span>
+            </div>
+            <div id="dataPreviewContent">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="previewProgress"></div>
+                </div>
+                <div id="previewTable"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart Creation Modal -->
+    <div id="chartModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Create Chart</h3>
+                <span class="close" onclick="closeModal('chartModal')">&times;</span>
+            </div>
+            <form id="chartForm">
+                <div class="form-group">
+                    <label for="chartType">Chart Type</label>
+                    <select id="chartType" required>
+                        <option value="bar">Bar Chart</option>
+                        <option value="line">Line Chart</option>
+                        <option value="pie">Pie Chart</option>
+                        <option value="scatter">Scatter Plot</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="chartTitle">Chart Title</label>
+                    <input type="text" id="chartTitle" placeholder="Enter chart title" required>
+                </div>
+                <div class="form-group">
+                    <label for="xColumn">X-Axis Column</label>
+                    <select id="xColumn" required>
+                        <option value="">Select X-axis column</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="yColumns">Y-Axis Columns</label>
+                    <select id="yColumns" multiple required>
+                        <option value="">Select Y-axis columns</option>
+                    </select>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('chartModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Chart</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Data Cleaning Modal -->
+    <div id="cleanModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Data Cleaning Options</h3>
+                <span class="close" onclick="closeModal('cleanModal')">&times;</span>
+            </div>
+            <form id="cleanForm">
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="removeDuplicates"> Remove Duplicate Rows
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="removeNulls"> Handle Missing Values
+                    </label>
+                    <select id="nullStrategy" disabled>
+                        <option value="drop_rows">Drop Rows with Missing Values</option>
+                        <option value="drop_columns">Drop Columns with Missing Values</option>
+                        <option value="fill">Fill Missing Values</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="convertTypes"> Convert Data Types
+                    </label>
+                    <div id="typeConversions" style="display: none;">
+                        <!-- Dynamic type conversion options will be added here -->
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="renameColumns"> Rename Columns
+                    </label>
+                    <div id="columnRenames" style="display: none;">
+                        <!-- Dynamic column rename options will be added here -->
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('cleanModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Apply Cleaning</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Formula Modal -->
+    <div id="formulaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Apply Formulas</h3>
+                <span class="close" onclick="closeModal('formulaModal')">&times;</span>
+            </div>
+            <form id="formulaForm">
+                <div class="form-group">
+                    <label for="formulaColumn">Target Column</label>
+                    <input type="text" id="formulaColumn" placeholder="Enter column name for result" required>
+                </div>
+                <div class="form-group">
+                    <label for="formulaExpression">Formula Expression</label>
+                    <textarea id="formulaExpression" placeholder="Enter Excel-like formula (e.g., =SUM(A:A), =A1+B1)" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Available Functions:</label>
+                    <div style="background: #f8f9ff; padding: 15px; border-radius: 8px; font-size: 0.9rem;">
+                        <strong>SUM(range):</strong> Sum of values in range (e.g., SUM(A:A))<br>
+                        <strong>AVERAGE(range):</strong> Average of values in range<br>
+                        <strong>COUNT(range):</strong> Count of non-empty cells<br>
+                        <strong>Cell References:</strong> A1, B2, etc.<br>
+                        <strong>Arithmetic:</strong> A1+B1, A1-B1, A1*B1, A1/B1
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('formulaModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Apply Formula</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Chart Display Modal -->
+    <div id="chartDisplayModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="chartDisplayTitle">Chart</h3>
+                <span class="close" onclick="closeModal('chartDisplayModal')">&times;</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartCanvas" class="chart-canvas"></canvas>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('chartDisplayModal')">Close</button>
+                <button type="button" class="btn btn-primary" onclick="downloadChart()">Download Chart</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let currentSessionId = null;
         let currentFileInfo = null;
@@ -566,11 +961,152 @@
         }
 
         function showCleanOptions() {
-            showError('Data cleaning options will be available in the next version');
+            if (!currentSessionId || !currentFileInfo) return;
+            
+            // Populate column options for cleaning
+            populateCleaningOptions();
+            document.getElementById('cleanModal').style.display = 'block';
         }
 
         function showChartOptions() {
-            showError('Chart creation options will be available in the next version');
+            if (!currentSessionId || !currentFileInfo) return;
+            
+            // Populate column options for charts
+            populateChartOptions();
+            document.getElementById('chartModal').style.display = 'block';
+        }
+
+        function showFormulaModal() {
+            if (!currentSessionId || !currentFileInfo) return;
+            document.getElementById('formulaModal').style.display = 'block';
+        }
+
+        function showDataPreview() {
+            if (!currentSessionId || !currentFileInfo) return;
+            
+            document.getElementById('dataPreviewModal').style.display = 'block';
+            loadDataPreview();
+        }
+
+        function populateCleaningOptions() {
+            const sheetName = Object.keys(currentFileInfo.sheets)[0];
+            const columns = currentFileInfo.sheets[sheetName].column_names;
+            
+            // Populate type conversions
+            const typeConversions = document.getElementById('typeConversions');
+            typeConversions.innerHTML = '';
+            columns.forEach(col => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '10px';
+                div.innerHTML = `
+                    <label>${col}:</label>
+                    <select id="type_${col}">
+                        <option value="">Keep original</option>
+                        <option value="numeric">Numeric</option>
+                        <option value="datetime">Date/Time</option>
+                        <option value="string">Text</option>
+                    </select>
+                `;
+                typeConversions.appendChild(div);
+            });
+            
+            // Populate column renames
+            const columnRenames = document.getElementById('columnRenames');
+            columnRenames.innerHTML = '';
+            columns.forEach(col => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '10px';
+                div.innerHTML = `
+                    <label>${col}:</label>
+                    <input type="text" id="rename_${col}" placeholder="New name (leave empty to keep original)">
+                `;
+                columnRenames.appendChild(div);
+            });
+        }
+
+        function populateChartOptions() {
+            const sheetName = Object.keys(currentFileInfo.sheets)[0];
+            const columns = currentFileInfo.sheets[sheetName].column_names;
+            
+            const xColumn = document.getElementById('xColumn');
+            const yColumns = document.getElementById('yColumns');
+            
+            xColumn.innerHTML = '<option value="">Select X-axis column</option>';
+            yColumns.innerHTML = '<option value="">Select Y-axis columns</option>';
+            
+            columns.forEach(col => {
+                const xOption = document.createElement('option');
+                xOption.value = col;
+                xOption.textContent = col;
+                xColumn.appendChild(xOption);
+                
+                const yOption = document.createElement('option');
+                yOption.value = col;
+                yOption.textContent = col;
+                yColumns.appendChild(yOption);
+            });
+        }
+
+        function loadDataPreview() {
+            const progressBar = document.getElementById('previewProgress');
+            const previewTable = document.getElementById('previewTable');
+            
+            // Simulate progress
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                progressBar.style.width = progress + '%';
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    // Load actual data preview
+                    loadActualDataPreview();
+                }
+            }, 100);
+        }
+
+        async function loadActualDataPreview() {
+            try {
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                const response = await fetch(`/api/excel/${currentSessionId}/preview/${sheetName}?limit=50`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayDataPreview(result.data);
+                } else {
+                    showError('Failed to load data preview');
+                }
+            } catch (error) {
+                showError('Failed to load data preview: ' + error.message);
+            }
+        }
+
+        function displayDataPreview(data) {
+            const previewTable = document.getElementById('previewTable');
+            
+            if (!data || data.length === 0) {
+                previewTable.innerHTML = '<p>No data available for preview</p>';
+                return;
+            }
+            
+            const columns = Object.keys(data[0]);
+            let tableHTML = '<table class="data-table"><thead><tr>';
+            
+            columns.forEach(col => {
+                tableHTML += `<th>${col}</th>`;
+            });
+            tableHTML += '</tr></thead><tbody>';
+            
+            data.forEach(row => {
+                tableHTML += '<tr>';
+                columns.forEach(col => {
+                    const value = row[col] !== null ? row[col] : '<em>null</em>';
+                    tableHTML += `<td>${value}</td>`;
+                });
+                tableHTML += '</tr>';
+            });
+            
+            tableHTML += '</tbody></table>';
+            previewTable.innerHTML = tableHTML;
         }
 
         function showLoading() {
@@ -611,6 +1147,254 @@
 
         function generateSessionId() {
             return 'session_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Modal handling functions
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+
+        // Form submission handlers
+        document.getElementById('chartForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const chartType = document.getElementById('chartType').value;
+            const chartTitle = document.getElementById('chartTitle').value;
+            const xColumn = document.getElementById('xColumn').value;
+            const yColumns = Array.from(document.getElementById('yColumns').selectedOptions).map(option => option.value);
+            
+            if (!xColumn || yColumns.length === 0) {
+                showNotification('Please select both X and Y axis columns', 'error');
+                return;
+            }
+            
+            const chartConfig = {
+                type: chartType,
+                title: chartTitle,
+                x_column: xColumn,
+                y_columns: yColumns
+            };
+            
+            try {
+                showLoading();
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                const response = await fetch(`/api/excel/${currentSessionId}/chart/${sheetName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ chart_config: chartConfig })
+                });
+                
+                if (response.ok) {
+                    const chartData = await response.blob();
+                    displayChart(chartData, chartConfig);
+                    closeModal('chartModal');
+                    showNotification('Chart created successfully!', 'success');
+                } else {
+                    showError('Failed to create chart');
+                }
+            } catch (error) {
+                showError('Chart creation failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        document.getElementById('cleanForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const operations = [];
+            
+            if (document.getElementById('removeDuplicates').checked) {
+                operations.push({ type: 'remove_duplicates' });
+            }
+            
+            if (document.getElementById('removeNulls').checked) {
+                const strategy = document.getElementById('nullStrategy').value;
+                operations.push({
+                    type: 'remove_nulls',
+                    params: { strategy: strategy }
+                });
+            }
+            
+            if (document.getElementById('convertTypes').checked) {
+                const conversions = {};
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                const columns = currentFileInfo.sheets[sheetName].column_names;
+                
+                columns.forEach(col => {
+                    const select = document.getElementById(`type_${col}`);
+                    if (select && select.value) {
+                        conversions[col] = select.value;
+                    }
+                });
+                
+                if (Object.keys(conversions).length > 0) {
+                    operations.push({
+                        type: 'convert_types',
+                        params: { conversions: conversions }
+                    });
+                }
+            }
+            
+            if (document.getElementById('renameColumns').checked) {
+                const mapping = {};
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                const columns = currentFileInfo.sheets[sheetName].column_names;
+                
+                columns.forEach(col => {
+                    const input = document.getElementById(`rename_${col}`);
+                    if (input && input.value.trim()) {
+                        mapping[col] = input.value.trim();
+                    }
+                });
+                
+                if (Object.keys(mapping).length > 0) {
+                    operations.push({
+                        type: 'rename_columns',
+                        params: { mapping: mapping }
+                    });
+                }
+            }
+            
+            if (operations.length === 0) {
+                showNotification('Please select at least one cleaning operation', 'error');
+                return;
+            }
+            
+            try {
+                showLoading();
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                const response = await fetch(`/api/excel/${currentSessionId}/clean/${sheetName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ operations: operations })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    closeModal('cleanModal');
+                    showNotification('Data cleaning completed successfully!', 'success');
+                    // Refresh file info
+                    analyzeData();
+                } else {
+                    showError(result.error.message || 'Data cleaning failed');
+                }
+            } catch (error) {
+                showError('Data cleaning failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        document.getElementById('formulaForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const column = document.getElementById('formulaColumn').value;
+            const formula = document.getElementById('formulaExpression').value;
+            
+            if (!column || !formula) {
+                showNotification('Please fill in both column name and formula', 'error');
+                return;
+            }
+            
+            const formulas = {};
+            formulas[column] = formula;
+            
+            try {
+                showLoading();
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                const response = await fetch(`/api/excel/${currentSessionId}/formulas/${sheetName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ formulas: formulas })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    closeModal('formulaModal');
+                    showNotification('Formula applied successfully!', 'success');
+                    // Refresh file info
+                    analyzeData();
+                } else {
+                    showError(result.error.message || 'Formula application failed');
+                }
+            } catch (error) {
+                showError('Formula application failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        // Enable/disable form controls based on checkboxes
+        document.getElementById('removeNulls').addEventListener('change', function() {
+            document.getElementById('nullStrategy').disabled = !this.checked;
+        });
+
+        document.getElementById('convertTypes').addEventListener('change', function() {
+            document.getElementById('typeConversions').style.display = this.checked ? 'block' : 'none';
+        });
+
+        document.getElementById('renameColumns').addEventListener('change', function() {
+            document.getElementById('columnRenames').style.display = this.checked ? 'block' : 'none';
+        });
+
+        function displayChart(chartData, config) {
+            document.getElementById('chartDisplayTitle').textContent = config.title;
+            document.getElementById('chartDisplayModal').style.display = 'block';
+            
+            // For now, we'll show a placeholder since we need to implement chart rendering
+            const canvas = document.getElementById('chartCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw placeholder
+            ctx.fillStyle = '#667eea';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${config.title}`, canvas.width / 2, canvas.height / 2);
+            ctx.fillText(`Chart Type: ${config.type}`, canvas.width / 2, canvas.height / 2 + 30);
+        }
+
+        function downloadChart() {
+            showNotification('Chart download feature coming soon!', 'info');
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('show');
+            }, 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
         }
     </script>
 </body>
