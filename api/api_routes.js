@@ -1224,4 +1224,147 @@ async function getMLRecommendations(sessionId, sheetName) {
     });
 }
 
+// Cloud Storage helper functions
+async function getCloudStorageStatus() {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'cloud_storage.py'),
+            'status'
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function uploadToCloud(filePath, provider, cloudPath, metadata) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'cloud_storage.py'),
+            'upload',
+            filePath,
+            provider,
+            cloudPath || ''
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function downloadFromCloud(provider, cloudPath) {
+    return new Promise((resolve, reject) => {
+        const tempPath = path.join(__dirname, 'temp', `download_${Date.now()}`);
+        
+        const python = spawn('python3', [
+            path.join(__dirname, 'cloud_storage.py'),
+            'download',
+            provider,
+            cloudPath,
+            tempPath
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function listCloudFiles(provider, prefix) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'cloud_storage.py'),
+            'list',
+            provider,
+            prefix || ''
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
 module.exports = router;
