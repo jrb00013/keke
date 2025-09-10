@@ -1,0 +1,52 @@
+{
+  "name": "keke-excel-tool",
+  "version": "1.0.0",
+  "description": "Advanced Excel datasheet processing and analysis tool",
+  "main": "api/server.js",
+  "scripts": {
+    "start": "node api/server.js",
+    "dev": "nodemon api/server.js",
+    "test": "jest",
+    "lint": "eslint api/",
+    "format": "prettier --write api/"
+  },
+  "keywords": [
+    "excel",
+    "data-analysis",
+    "spreadsheet",
+    "data-processing",
+    "csv",
+    "json"
+  ],
+  "author": "Keke Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^6.0.1",
+    "express-rate-limit": "^6.7.0",
+    "morgan": "^1.10.0",
+    "compression": "^1.7.4",
+    "multer": "^1.4.5-lts.1",
+    "express-validator": "^6.14.3",
+    "nodemon": "^2.0.20"
+  },
+  "devDependencies": {
+    "jest": "^29.3.1",
+    "eslint": "^8.30.0",
+    "prettier": "^2.8.0",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keke-team/keke-excel-tool.git"
+  },
+  "bugs": {
+    "url": "https://github.com/keke-team/keke-excel-tool/issues"
+  },
+  "homepage": "https://github.com/keke-team/keke-excel-tool#readme"
+}

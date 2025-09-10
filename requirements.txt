@@ -1,3 +1,50 @@
-requests
-numpy
-scikit-learn
+# Core data processing libraries
+pandas>=1.5.0
+numpy>=1.21.0
+openpyxl>=3.0.10
+
+# Excel and file processing
+xlrd>=2.0.1
+xlsxwriter>=3.0.3
+pyarrow>=10.0.0
+
+# Data analysis and visualization
+scikit-learn>=1.1.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Web framework and API
+flask>=2.2.0
+flask-cors>=3.0.10
+requests>=2.28.0
+
+# Async support
+aiohttp>=3.8.0
+asyncio-throttle>=1.0.2
+
+# Data validation and parsing
+pydantic>=1.10.0
+jsonschema>=4.0.0
+
+# Logging and monitoring
+structlog>=22.0.0
+
+# Development and testing
+pytest>=7.0.0
+pytest-asyncio>=0.20.0
+black>=22.0.0
+flake8>=5.0.0
+
+# Optional: Advanced data processing
+scipy>=1.9.0
+statsmodels>=0.13.0
+plotly>=5.10.0
+
+# Optional: Machine learning
+xgboost>=1.6.0
+lightgbm>=3.3.0
+
+# Optional: Database support
+sqlalchemy>=1.4.0
+psycopg2-binary>=2.9.0
+pymongo>=4.0.0
