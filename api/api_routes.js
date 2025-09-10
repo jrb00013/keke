@@ -613,6 +613,149 @@ router.post('/excel/:sessionId/sync/:sheetName',
     }
 );
 
+// Collaboration Endpoints
+
+// Create collaboration session
+router.post('/collaboration/sessions',
+    body('user_id').isLength({ min: 1 }).withMessage('User ID is required'),
+    body('session_name').isLength({ min: 1 }).withMessage('Session name is required'),
+    body('file_info').isObject().withMessage('File info must be an object'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { user_id, session_name, file_info } = req.body;
+            
+            const result = await createCollaborationSession(user_id, session_name, file_info);
+            
+            res.json({
+                success: true,
+                collaboration: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Join collaboration session
+router.post('/collaboration/sessions/:sessionId/join',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    body('user_id').isLength({ min: 1 }).withMessage('User ID is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId } = req.params;
+            const { user_id } = req.body;
+            
+            const result = await joinCollaborationSession(user_id, sessionId);
+            
+            res.json({
+                success: true,
+                collaboration: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Leave collaboration session
+router.post('/collaboration/sessions/:sessionId/leave',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    body('user_id').isLength({ min: 1 }).withMessage('User ID is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId } = req.params;
+            const { user_id } = req.body;
+            
+            const result = await leaveCollaborationSession(user_id, sessionId);
+            
+            res.json({
+                success: true,
+                collaboration: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Apply change to collaboration session
+router.post('/collaboration/sessions/:sessionId/changes',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    body('user_id').isLength({ min: 1 }).withMessage('User ID is required'),
+    body('change').isObject().withMessage('Change must be an object'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId } = req.params;
+            const { user_id, change } = req.body;
+            
+            const result = await applyCollaborationChange(user_id, sessionId, change);
+            
+            res.json({
+                success: true,
+                collaboration: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Get collaboration session state
+router.get('/collaboration/sessions/:sessionId',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId } = req.params;
+            
+            const result = await getCollaborationSessionState(sessionId);
+            
+            res.json({
+                success: true,
+                collaboration: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Get user's collaboration sessions
+router.get('/collaboration/users/:userId/sessions',
+    param('userId').isLength({ min: 1 }).withMessage('User ID is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { userId } = req.params;
+            
+            const result = await getUserCollaborationSessions(userId);
+            
+            res.json({
+                success: true,
+                collaboration: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 // Batch process multiple files
 router.post('/excel/batch',
     upload.array('files', 10), // Max 10 files
@@ -1339,6 +1482,217 @@ async function listCloudFiles(provider, prefix) {
             'list',
             provider,
             prefix || ''
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+// Collaboration helper functions
+async function createCollaborationSession(userId, sessionName, fileInfo) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'collaboration.py'),
+            'create_session',
+            userId,
+            sessionName,
+            JSON.stringify(fileInfo)
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function joinCollaborationSession(userId, sessionId) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'collaboration.py'),
+            'join_session',
+            userId,
+            sessionId
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function leaveCollaborationSession(userId, sessionId) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'collaboration.py'),
+            'leave_session',
+            userId,
+            sessionId
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function applyCollaborationChange(userId, sessionId, change) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'collaboration.py'),
+            'apply_change',
+            userId,
+            sessionId,
+            JSON.stringify(change)
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function getCollaborationSessionState(sessionId) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'collaboration.py'),
+            'get_session_state',
+            sessionId
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function getUserCollaborationSessions(userId) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'collaboration.py'),
+            'get_user_sessions',
+            userId
         ]);
         
         let output = '';
