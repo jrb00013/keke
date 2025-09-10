@@ -1,4 +1,4 @@
-# Keke - Advanced AI-Powered Excel Datasheet Tool
+# Keke - AI-Powered Excel Datasheet Tool
 
 Keke is a cutting-edge, AI-powered web-based tool designed to revolutionize Excel functionality with advanced data processing, machine learning, and intelligent analysis capabilities. It provides a modern interface for working with Excel files, CSV data, and JSON files, enhanced with artificial intelligence for smarter data insights.
 
