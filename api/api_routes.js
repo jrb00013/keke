@@ -1,6 +1,32 @@
 const express = require('express');
+const multer = require('multer');
 const { body, param, query, validationResult } = require('express-validator');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs').promises;
 const router = express.Router();
+
+// Configure multer for file uploads
+const upload = multer({
+    dest: 'uploads/',
+    limits: {
+        fileSize: 50 * 1024 * 1024 // 50MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+            'application/vnd.ms-excel', // .xls
+            'text/csv', // .csv
+            'application/json' // .json
+        ];
+        
+        if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls|csv|json)$/)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only Excel, CSV, and JSON files are allowed.'), false);
+        }
+    }
+});
 
 // Validation middleware
 const validateRequest = (req, res, next) => {
@@ -16,154 +42,483 @@ const validateRequest = (req, res, next) => {
     next();
 };
 
-// Stock symbol validation
-const validateSymbol = param('symbol')
-    .isLength({ min: 1, max: 10 })
-    .matches(/^[A-Z]+$/)
-    .withMessage('Symbol must be 1-10 uppercase letters');
+// Excel Processing Endpoints
 
-// Enhanced stock data endpoint
-router.get('/stock/:symbol', 
-    validateSymbol,
-    validateRequest,
+// Upload and load Excel file
+router.post('/excel/upload',
+    upload.single('file'),
     async (req, res, next) => {
         try {
-            const symbol = req.params.symbol.toUpperCase();
-            
-            // Simulate API call with timeout
-            const stockData = await fetchStockData(symbol);
-            
-            if (!stockData) {
-                return res.status(404).json({
+            if (!req.file) {
+                return res.status(400).json({
                     error: {
-                        message: `Stock data not found for symbol: ${symbol}`,
-                        status: 404
+                        message: 'No file uploaded',
+                        status: 400
                     }
                 });
             }
+
+            const filePath = req.file.path;
+            const originalName = req.file.originalname;
+            
+            // Process file with Python
+            const result = await processExcelFile(filePath, originalName);
+            
+            // Clean up uploaded file
+            await fs.unlink(filePath);
             
             res.json({
-                symbol: symbol,
-                data: stockData,
+                success: true,
+                file_info: result,
                 timestamp: new Date().toISOString()
             });
+            
         } catch (error) {
+            // Clean up file on error
+            if (req.file) {
+                try {
+                    await fs.unlink(req.file.path);
+                } catch (cleanupError) {
+                    console.error('Error cleaning up file:', cleanupError);
+                }
+            }
             next(error);
         }
     }
 );
 
-// Enhanced prediction endpoint
-router.get('/predict/:symbol',
-    validateSymbol,
-    query('days').optional().isInt({ min: 1, max: 30 }).withMessage('Days must be between 1 and 30'),
+// Analyze data in a sheet
+router.get('/excel/:sessionId/analyze/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
     validateRequest,
     async (req, res, next) => {
         try {
-            const symbol = req.params.symbol.toUpperCase();
-            const days = parseInt(req.query.days) || 7;
+            const { sessionId, sheetName } = req.params;
             
-            const prediction = await generatePrediction(symbol, days);
+            const analysis = await analyzeSheetData(sessionId, sheetName);
             
             res.json({
-                symbol: symbol,
-                prediction: prediction,
-                confidence: prediction.confidence,
-                prediction_date: new Date().toISOString(),
-                forecast_days: days
+                success: true,
+                analysis: analysis,
+                timestamp: new Date().toISOString()
             });
+            
         } catch (error) {
             next(error);
         }
     }
 );
 
-// New endpoint: Get multiple stocks
-router.post('/stocks/batch',
-    body('symbols').isArray({ min: 1, max: 10 }).withMessage('Symbols must be an array of 1-10 items'),
-    body('symbols.*').matches(/^[A-Z]+$/).withMessage('Each symbol must be uppercase letters'),
+// Clean data in a sheet
+router.post('/excel/:sessionId/clean/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('operations').isArray().withMessage('Operations must be an array'),
     validateRequest,
     async (req, res, next) => {
         try {
-            const symbols = req.body.symbols.map(s => s.toUpperCase());
+            const { sessionId, sheetName } = req.params;
+            const { operations } = req.body;
+            
+            const result = await cleanSheetData(sessionId, sheetName, operations);
+            
+            res.json({
+                success: true,
+                result: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Create chart from sheet data
+router.post('/excel/:sessionId/chart/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('chart_config').isObject().withMessage('Chart config must be an object'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { chart_config } = req.body;
+            
+            const chartData = await createChart(sessionId, sheetName, chart_config);
+            
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="chart_${sheetName}.xlsx"`);
+            res.send(chartData);
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Export data in various formats
+router.get('/excel/:sessionId/export/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    query('format').isIn(['csv', 'json', 'excel', 'parquet']).withMessage('Format must be csv, json, excel, or parquet'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { format } = req.query;
+            
+            const exportData = await exportSheetData(sessionId, sheetName, format);
+            
+            const contentType = {
+                'csv': 'text/csv',
+                'json': 'application/json',
+                'excel': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'parquet': 'application/octet-stream'
+            };
+            
+            res.setHeader('Content-Type', contentType[format]);
+            res.setHeader('Content-Disposition', `attachment; filename="${sheetName}.${format}"`);
+            res.send(exportData);
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Apply formulas to sheet data
+router.post('/excel/:sessionId/formulas/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('formulas').isObject().withMessage('Formulas must be an object'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { formulas } = req.body;
+            
+            const result = await applyFormulas(sessionId, sheetName, formulas);
+            
+            res.json({
+                success: true,
+                result: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Get summary of all loaded data
+router.get('/excel/:sessionId/summary',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId } = req.params;
+            
+            const summary = await getDataSummary(sessionId);
+            
+            res.json({
+                success: true,
+                summary: summary,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Batch process multiple files
+router.post('/excel/batch',
+    upload.array('files', 10), // Max 10 files
+    async (req, res, next) => {
+        try {
+            if (!req.files || req.files.length === 0) {
+                return res.status(400).json({
+                    error: {
+                        message: 'No files uploaded',
+                        status: 400
+                    }
+                });
+            }
+
             const results = await Promise.allSettled(
-                symbols.map(symbol => fetchStockData(symbol))
+                req.files.map(file => processExcelFile(file.path, file.originalname))
             );
             
-            const stockData = results.map((result, index) => ({
-                symbol: symbols[index],
+            // Clean up uploaded files
+            await Promise.all(
+                req.files.map(file => fs.unlink(file.path))
+            );
+            
+            const processedResults = results.map((result, index) => ({
+                file: req.files[index].originalname,
                 success: result.status === 'fulfilled',
                 data: result.status === 'fulfilled' ? result.value : null,
                 error: result.status === 'rejected' ? result.reason.message : null
             }));
             
             res.json({
-                stocks: stockData,
+                success: true,
+                results: processedResults,
                 timestamp: new Date().toISOString()
             });
+            
         } catch (error) {
+            // Clean up files on error
+            if (req.files) {
+                await Promise.all(
+                    req.files.map(file => fs.unlink(file.path).catch(console.error))
+                );
+            }
             next(error);
         }
     }
 );
 
-// New endpoint: Get market summary
-router.get('/market/summary', async (req, res, next) => {
-    try {
-        const summary = await getMarketSummary();
-        res.json({
-            summary: summary,
-            timestamp: new Date().toISOString()
+// Helper functions to interact with Python Excel processor
+async function processExcelFile(filePath, originalName) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'load_file',
+            filePath
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
         });
-    } catch (error) {
-        next(error);
-    }
-});
-
-// Helper functions (these would be moved to separate modules in production)
-async function fetchStockData(symbol) {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Mock data - in production, this would call a real API
-    const mockData = {
-        'AAPL': { price: 175.43, change: 2.15, changePercent: 1.24 },
-        'GOOGL': { price: 142.56, change: -1.23, changePercent: -0.86 },
-        'MSFT': { price: 378.85, change: 5.67, changePercent: 1.52 },
-        'TSLA': { price: 248.50, change: -3.20, changePercent: -1.27 }
-    };
-    
-    return mockData[symbol] || null;
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
 }
 
-async function generatePrediction(symbol, days) {
-    // Simulate AI prediction delay
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    const basePrice = 150.0;
-    const volatility = 0.02;
-    const trend = 0.001;
-    
-    const prediction = basePrice * (1 + trend * days + (Math.random() - 0.5) * volatility * days);
-    const confidence = Math.max(0.6, 1 - Math.random() * 0.4);
-    
-    return {
-        predicted_price: Math.round(prediction * 100) / 100,
-        confidence: Math.round(confidence * 100) / 100,
-        trend: trend > 0 ? 'bullish' : 'bearish'
-    };
+async function analyzeSheetData(sessionId, sheetName) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'analyze_data',
+            sessionId,
+            sheetName
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
 }
 
-async function getMarketSummary() {
-    await new Promise(resolve => setTimeout(resolve, 150));
-    
-    return {
-        market_status: 'open',
-        total_volume: 45000000,
-        gainers: 1250,
-        losers: 980,
-        unchanged: 320
-    };
+async function cleanSheetData(sessionId, sheetName, operations) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'clean_data',
+            sessionId,
+            sheetName,
+            JSON.stringify(operations)
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function createChart(sessionId, sheetName, chartConfig) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'create_chart',
+            sessionId,
+            sheetName,
+            JSON.stringify(chartConfig)
+        ]);
+        
+        let output = Buffer.alloc(0);
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output = Buffer.concat([output, data]);
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                resolve(output);
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function exportSheetData(sessionId, sheetName, format) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'export_data',
+            sessionId,
+            sheetName,
+            format
+        ]);
+        
+        let output = Buffer.alloc(0);
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output = Buffer.concat([output, data]);
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                resolve(output);
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function applyFormulas(sessionId, sheetName, formulas) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'apply_formulas',
+            sessionId,
+            sheetName,
+            JSON.stringify(formulas)
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function getDataSummary(sessionId) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'get_summary',
+            sessionId
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
 }
 
 module.exports = router;
