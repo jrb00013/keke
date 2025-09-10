@@ -457,6 +457,162 @@ router.get('/excel/:sessionId/ml-recommendations/:sheetName',
     }
 );
 
+// Cloud Storage Endpoints
+
+// Get cloud storage status
+router.get('/cloud/status',
+    async (req, res, next) => {
+        try {
+            const status = await getCloudStorageStatus();
+            
+            res.json({
+                success: true,
+                status: status,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Upload file to cloud storage
+router.post('/cloud/upload',
+    upload.single('file'),
+    body('provider').isIn(['s3', 'google_drive', 'dropbox']).withMessage('Provider must be s3, google_drive, or dropbox'),
+    body('cloud_path').optional().isLength({ min: 1 }).withMessage('Cloud path must be provided'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    error: {
+                        message: 'No file uploaded',
+                        status: 400
+                    }
+                });
+            }
+            
+            const { provider, cloud_path, metadata } = req.body;
+            const file_path = req.file.path;
+            
+            const result = await uploadToCloud(file_path, provider, cloud_path, metadata);
+            
+            // Clean up uploaded file
+            await fs.unlink(file_path);
+            
+            res.json({
+                success: true,
+                upload: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            // Clean up file on error
+            if (req.file) {
+                try {
+                    await fs.unlink(req.file.path);
+                } catch (cleanupError) {
+                    console.error('Error cleaning up file:', cleanupError);
+                }
+            }
+            next(error);
+        }
+    }
+);
+
+// Download file from cloud storage
+router.get('/cloud/download/:provider',
+    param('provider').isIn(['s3', 'google_drive', 'dropbox']).withMessage('Provider must be s3, google_drive, or dropbox'),
+    query('cloud_path').isLength({ min: 1 }).withMessage('Cloud path is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { provider } = req.params;
+            const { cloud_path } = req.query;
+            
+            const result = await downloadFromCloud(provider, cloud_path);
+            
+            if (result.success) {
+                res.download(result.local_path, result.filename || 'downloaded_file');
+            } else {
+                res.status(400).json({
+                    error: {
+                        message: result.error,
+                        status: 400
+                    }
+                });
+            }
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// List files in cloud storage
+router.get('/cloud/list/:provider',
+    param('provider').isIn(['s3', 'google_drive', 'dropbox']).withMessage('Provider must be s3, google_drive, or dropbox'),
+    query('prefix').optional().isLength({ min: 1 }).withMessage('Prefix must be provided'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { provider } = req.params;
+            const { prefix } = req.query;
+            
+            const result = await listCloudFiles(provider, prefix);
+            
+            res.json({
+                success: true,
+                files: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Sync processed data to cloud
+router.post('/excel/:sessionId/sync/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('provider').isIn(['s3', 'google_drive', 'dropbox']).withMessage('Provider must be s3, google_drive, or dropbox'),
+    body('format').isIn(['csv', 'json', 'excel']).withMessage('Format must be csv, json, or excel'),
+    body('cloud_path').optional().isLength({ min: 1 }).withMessage('Cloud path must be provided'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { provider, format, cloud_path, metadata } = req.body;
+            
+            // First export the data
+            const exportData = await exportSheetData(sessionId, sheetName, format);
+            
+            // Create temporary file
+            const tempPath = path.join(__dirname, 'temp', `sync_${Date.now()}.${format}`);
+            await fs.writeFile(tempPath, exportData);
+            
+            // Upload to cloud
+            const result = await uploadToCloud(tempPath, provider, cloud_path, metadata);
+            
+            // Clean up temp file
+            await fs.unlink(tempPath);
+            
+            res.json({
+                success: true,
+                sync: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 // Batch process multiple files
 router.post('/excel/batch',
     upload.array('files', 10), // Max 10 files
