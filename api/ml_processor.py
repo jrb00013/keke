@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import json
 import logging
+import os
+import requests
 from typing import Dict, List, Optional, Tuple, Any, Union
 from datetime import datetime
 from pathlib import Path
@@ -10,18 +12,57 @@ warnings.filterwarnings('ignore')
 
 # Machine Learning imports
 try:
-    from sklearn.model_selection import train_test_split, cross_val_score
-    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-    from sklearn.linear_model import LinearRegression, LogisticRegression
-    from sklearn.cluster import KMeans, DBSCAN
-    from sklearn.preprocessing import StandardScaler, LabelEncoder
-    from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, classification_report
-    from sklearn.decomposition import PCA
-    from sklearn.feature_selection import SelectKBest, f_classif, f_regression
+    from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier, GradientBoostingRegressor
+    from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Lasso, ElasticNet
+    from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
+    from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler, RobustScaler
+    from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, classification_report, confusion_matrix
+    from sklearn.decomposition import PCA, FastICA, TruncatedSVD
+    from sklearn.feature_selection import SelectKBest, f_classif, f_regression, RFE
+    from sklearn.neural_network import MLPClassifier, MLPRegressor
+    from sklearn.svm import SVC, SVR
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+    from sklearn.naive_bayes import GaussianNB
+    from sklearn.ensemble import IsolationForest
+    from sklearn.covariance import EllipticEnvelope
+    from sklearn.preprocessing import PolynomialFeatures
+    from sklearn.pipeline import Pipeline
+    import joblib
     ML_AVAILABLE = True
 except ImportError:
     ML_AVAILABLE = False
     logging.warning("scikit-learn not available. ML features will be disabled.")
+
+# Advanced ML libraries
+try:
+    import xgboost as xgb
+    import lightgbm as lgb
+    ADVANCED_ML_AVAILABLE = True
+except ImportError:
+    ADVANCED_ML_AVAILABLE = False
+    logging.warning("XGBoost/LightGBM not available. Advanced ML features will be disabled.")
+
+# AI/LLM Integration
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    logging.warning("OpenAI not available. LLM features will be disabled.")
+
+# Visualization
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+    VISUALIZATION_AVAILABLE = True
+except ImportError:
+    VISUALIZATION_AVAILABLE = False
+    logging.warning("Visualization libraries not available. Chart features will be disabled.")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
