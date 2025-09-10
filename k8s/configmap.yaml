@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keke-config
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+data:
+  # Application Configuration
+  KEKE_ENV: "production"
+  HOST: "0.0.0.0"
+  PORT: "3000"
+  DEBUG: "false"
+  
+  # AI Configuration
+  AI_ENABLED: "true"
+  OPENAI_MODEL: "gpt-3.5-turbo"
+  OPENAI_MAX_TOKENS: "500"
+  OPENAI_TEMPERATURE: "0.7"
+  
+  # Database Configuration
+  DATABASE_URL: "postgresql://postgres:password@postgres-service:5432/keke"
+  REDIS_URL: "redis://redis-service:6379"
+  MONGODB_URL: "mongodb://mongodb-service:27017/keke"
+  
+  # File Processing Configuration
+  MAX_FILE_SIZE: "52428800"
+  SUPPORTED_FORMATS: "xlsx,xls,csv,json,parquet"
+  CLEANUP_INTERVAL: "3600"
+  
+  # Performance Configuration
+  WORKER_PROCESSES: "4"
+  MAX_MEMORY_USAGE: "1073741824"
+  CACHE_TTL: "3600"
+  CACHE_MAX_SIZE: "1000"
+  
+  # Security Configuration
+  RATE_LIMIT: "100"
+  RATE_WINDOW: "900"
+  
+  # Monitoring Configuration
+  MONITORING_ENABLED: "true"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  
+  # Feature Flags
+  FEATURE_AI_ASSISTANT: "true"
+  FEATURE_MACHINE_LEARNING: "true"
+  FEATURE_CLOUD_STORAGE: "true"
+  FEATURE_COLLABORATION: "true"
+  FEATURE_REAL_TIME_UPDATES: "true"
+  FEATURE_ADVANCED_ANALYTICS: "true"
+  FEATURE_AUTOMATED_REPORTING: "true"
