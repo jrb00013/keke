@@ -28,7 +28,7 @@ except ImportError:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class AIAssistant:
+class Assistant:
     """
     AI-powered assistant for natural language data queries and analysis
     """
@@ -210,7 +210,7 @@ class AIAssistant:
         # Generate AI insights
         if self.openai_available:
             prompt = f"""
-            You are a data analyst AI assistant. A user asked: "{query}"
+            You are a web based data analyst AI assistant who only responds in text. A user asked: "{query}"
             
             Here's the analysis results:
             {json.dumps(analysis_results, indent=2)}
@@ -662,7 +662,7 @@ if __name__ == "__main__":
         df = pd.DataFrame(data)
         
         # Initialize AI assistant
-        assistant = AIAssistant()
+        assistant = Assistant()
         
         # Process query
         result = assistant.process_natural_language_query(query, df)
