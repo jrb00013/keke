@@ -1,0 +1,197 @@
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keke-excel-tool
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: keke-excel-tool
+        component: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data-pvc
+
+---
+# MongoDB Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keke-excel-tool
+      component: mongodb
+  template:
+    metadata:
+      labels:
+        app: keke-excel-tool
+        component: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:6
+        ports:
+        - containerPort: 27017
+          name: mongodb
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: "admin"
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keke-secrets
+              key: MONGODB_PASSWORD
+        - name: MONGO_INITDB_DATABASE
+          value: "keke"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: mongodb-data
+          mountPath: /data/db
+        livenessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: mongodb-data
+        persistentVolumeClaim:
+          claimName: mongodb-data-pvc
+
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keke-excel-tool
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: keke-excel-tool
+        component: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_DB
+          value: "keke"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: keke-secrets
+              key: POSTGRES_PASSWORD
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-data-pvc

@@ -1,6 +1,29 @@
-# Keke - Advanced Excel Datasheet Tool
+# Keke - Advanced AI-Powered Excel Datasheet Tool
 
-Keke is a powerful web-based tool designed to enhance Excel functionality with advanced data processing, analysis, and manipulation capabilities. It provides a modern interface for working with Excel files, CSV data, and JSON files.
+Keke is a cutting-edge, AI-powered web-based tool designed to revolutionize Excel functionality with advanced data processing, machine learning, and intelligent analysis capabilities. It provides a modern interface for working with Excel files, CSV data, and JSON files, enhanced with artificial intelligence for smarter data insights.
+
+## 🚀 Key Features
+
+### 🤖 AI-Powered Capabilities
+- **Natural Language Queries**: Ask questions about your data in plain English
+- **AI Data Analysis**: Intelligent insights and pattern recognition
+- **Smart Data Cleaning**: AI-driven recommendations for data quality improvements
+- **Automated Visualization**: AI suggests the best charts and graphs for your data
+- **Predictive Analytics**: Machine learning models for forecasting and classification
+
+### 📊 Advanced Data Processing
+- **Multi-format Support**: Excel (.xlsx, .xls), CSV, JSON, Parquet
+- **Real-time Collaboration**: Multiple users can work on the same dataset simultaneously
+- **Cloud Integration**: Seamless integration with AWS S3, Google Drive, Dropbox
+- **Batch Processing**: Handle multiple files simultaneously
+- **Advanced Formulas**: Excel-like formula engine with AI enhancements
+
+### 🔧 Enterprise Features
+- **Scalable Architecture**: Kubernetes-ready with auto-scaling
+- **Comprehensive Monitoring**: Prometheus and Grafana integration
+- **Security**: JWT authentication, rate limiting, data encryption
+- **CI/CD Pipeline**: Automated testing and deployment
+- **Multi-environment Support**: Development, staging, and production deployments
 
 ## Features
 
@@ -40,14 +63,16 @@ Keke is a powerful web-based tool designed to enhance Excel functionality with a
 - Progress tracking and error handling
 - Bulk operations support
 
-## Installation
+## 🛠️ Installation & Setup
 
 ### Prerequisites
-- Node.js 16+ 
-- Python 3.8+
-- npm or yarn
+- **Node.js** 18+ 
+- **Python** 3.9+
+- **Docker** (for containerized deployment)
+- **Kubernetes** (for production deployment)
+- **npm** or **yarn**
 
-### Setup
+### Quick Start
 
 1. **Clone the repository**
    ```bash
@@ -55,35 +80,121 @@ Keke is a powerful web-based tool designed to enhance Excel functionality with a
    cd keke-excel-tool
    ```
 
-2. **Install Node.js dependencies**
+2. **Install dependencies**
+   ```bash
+   # Install all dependencies automatically
+   python3 run.py install
+   
+   # Or install manually
+   npm install
+   pip install -r requirements.txt
+   ```
+
+3. **Configure environment**
+   ```bash
+   # Copy environment template
+   cp env.example .env
+   
+   # Edit .env with your configuration
+   nano .env
+   ```
+
+4. **Start Keke**
+   ```bash
+   # Start with all services (databases, monitoring)
+   python3 run.py start --mode full
+   
+   # Or start application only
+   python3 run.py start --mode app-only
+   ```
+
+### 🐳 Docker Deployment
+
+```bash
+# Build Docker image
+docker build -t keke-excel-tool .
+
+# Run with Docker Compose
+docker-compose up -d
+
+# Check status
+docker-compose ps
+```
+
+### ☸️ Kubernetes Deployment
+
+```bash
+# Deploy to development
+./scripts/deploy.sh deploy development
+
+# Deploy to production
+./scripts/deploy.sh deploy production
+
+# Check deployment status
+./scripts/deploy.sh status
+
+# Rollback if needed
+./scripts/deploy.sh rollback
+```
+
+### 🔧 Manual Setup
+
+1. **Install Node.js dependencies**
    ```bash
    npm install
    ```
 
-3. **Install Python dependencies**
+2. **Install Python dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Create necessary directories**
+3. **Create necessary directories**
    ```bash
-   mkdir -p api/uploads
-   mkdir -p api/public
+   mkdir -p uploads logs data temp models cache
    ```
 
-## Usage
+4. **Set up environment variables**
+   ```bash
+   export OPENAI_API_KEY="your_openai_api_key"
+   export ANTHROPIC_API_KEY="your_anthropic_api_key"
+   export DATABASE_URL="postgresql://user:pass@localhost:5432/keke"
+   ```
+
+## 🚀 Usage
 
 ### Starting the Server
 
 ```bash
+# Using the comprehensive runner (recommended)
+python3 run.py start
+
 # Development mode with auto-reload
 npm run dev
 
 # Production mode
 npm start
+
+# With specific configuration
+python3 run.py start --mode with-db --verbose
 ```
 
 The server will start on `http://localhost:3000`
+
+### AI Assistant Usage
+
+```bash
+# Ask questions about your data
+curl -X POST http://localhost:3000/api/ai/query/session123/Sheet1 \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What insights can you provide about this sales data?"}'
+
+# Get AI-powered cleaning suggestions
+curl http://localhost:3000/api/ai/cleaning-suggestions/session123/Sheet1
+
+# Get visualization recommendations
+curl http://localhost:3000/api/ai/visualization-suggestions/session123/Sheet1
+```
 
 ### Web Interface
 
