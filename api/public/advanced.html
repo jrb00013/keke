@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keke - Advanced Excel Datasheet Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .upload-section:hover {
+            border-color: #764ba2;
+            background-color: #f8f9ff;
+        }
+
+        .upload-section.dragover {
+            border-color: #764ba2;
+            background-color: #f0f2ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: #555;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .status-panel {
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        .status-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .status-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .status-value {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-left: 10px;
+        }
+
+        .status-online {
+            background-color: #00b894;
+        }
+
+        .status-offline {
+            background-color: #d63031;
+        }
+
+        .status-warning {
+            background-color: #fdcb6e;
+        }
+
+        .file-info {
+            background: #f0f2ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            color: #333;
+        }
+
+        .actions {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .action-btn {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            padding: 15px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        .action-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .action-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .result-section {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .error {
+            background: #ffe6e6;
+            color: #d63031;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #d63031;
+        }
+
+        .success {
+            background: #e6ffe6;
+            color: #00b894;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #00b894;
+        }
+
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #ffc107;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .real-time-updates {
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .update-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .update-time {
+            font-size: 0.8rem;
+            color: #666;
+            float: right;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .chart-placeholder {
+            height: 300px;
+            background: #f8f9ff;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #667eea;
+            font-size: 1.2rem;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .data-table th {
+            background: #f8f9ff;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .data-table tr:hover {
+            background: #f8f9ff;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideInRight 0.3s ease;
+        }
+
+        .notification.success {
+            background: #00b894;
+        }
+
+        .notification.error {
+            background: #d63031;
+        }
+
+        .notification.warning {
+            background: #fdcb6e;
+            color: #333;
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 80%;
+            max-width: 600px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 15px;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: #333;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            background: white;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-secondary:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .actions {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Keke Advanced</h1>
+            <p>Enterprise Excel Datasheet Processing Platform</p>
+        </div>
+
+        <div class="main-content">
+            <div class="dashboard">
+                <div class="upload-section" id="uploadSection">
+                    <div class="upload-icon">📊</div>
+                    <div class="upload-text">
+                        Drag and drop your Excel file here, or click to browse
+                    </div>
+                    <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls,.csv,.json" multiple>
+                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                        Choose Files
+                    </button>
+                    <div class="progress-bar" id="uploadProgress" style="display: none;">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+
+                <div class="status-panel">
+                    <div class="status-title">System Status</div>
+                    <div class="status-item">
+                        <span class="status-label">Server Status</span>
+                        <span class="status-value">
+                            <span id="serverStatus">Checking...</span>
+                            <span class="status-indicator" id="serverIndicator"></span>
+                        </span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">FreeRTOS Kernel</span>
+                        <span class="status-value">
+                            <span id="kernelStatus">Checking...</span>
+                            <span class="status-indicator" id="kernelIndicator"></span>
+                        </span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Cloud Services</span>
+                        <span class="status-value">
+                            <span id="cloudStatus">Checking...</span>
+                            <span class="status-indicator" id="cloudIndicator"></span>
+                        </span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Active Tasks</span>
+                        <span class="status-value" id="activeTasks">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Memory Usage</span>
+                        <span class="status-value" id="memoryUsage">0 MB</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Processing your files...</div>
+            </div>
+
+            <div class="file-info" id="fileInfo">
+                <h3>File Information</h3>
+                <div id="fileDetails"></div>
+            </div>
+
+            <div class="actions" id="actions" style="display: none;">
+                <button class="action-btn" onclick="analyzeData()">Analyze Data</button>
+                <button class="action-btn" onclick="showCleanModal()">Clean Data</button>
+                <button class="action-btn" onclick="showChartModal()">Create Chart</button>
+                <button class="action-btn" onclick="showFormulaModal()">Apply Formulas</button>
+                <button class="action-btn" onclick="exportData('csv')">Export CSV</button>
+                <button class="action-btn" onclick="exportData('json')">Export JSON</button>
+                <button class="action-btn" onclick="exportData('excel')">Export Excel</button>
+                <button class="action-btn" onclick="showBatchModal()">Batch Process</button>
+            </div>
+
+            <div class="real-time-updates" id="realTimeUpdates">
+                <h3>Real-time Updates</h3>
+                <div id="updateList"></div>
+            </div>
+
+            <div class="results" id="results"></div>
+        </div>
+    </div>
+
+    <!-- Clean Data Modal -->
+    <div id="cleanModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Data Cleaning Options</h2>
+                <span class="close" onclick="closeModal('cleanModal')">&times;</span>
+            </div>
+            <form id="cleanForm">
+                <div class="form-group">
+                    <label class="form-label">Remove Duplicates</label>
+                    <input type="checkbox" id="removeDuplicates" checked>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Handle Missing Values</label>
+                    <select class="form-select" id="nullStrategy">
+                        <option value="drop_rows">Drop Rows</option>
+                        <option value="drop_columns">Drop Columns</option>
+                        <option value="fill">Fill Values</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fill Method (if filling)</label>
+                    <select class="form-select" id="fillMethod">
+                        <option value="forward">Forward Fill</option>
+                        <option value="backward">Backward Fill</option>
+                        <option value="mean">Mean</option>
+                        <option value="median">Median</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Convert Data Types</label>
+                    <input type="checkbox" id="convertTypes" checked>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="closeModal('cleanModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Apply Cleaning</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Chart Modal -->
+    <div id="chartModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Create Chart</h2>
+                <span class="close" onclick="closeModal('chartModal')">&times;</span>
+            </div>
+            <form id="chartForm">
+                <div class="form-group">
+                    <label class="form-label">Chart Type</label>
+                    <select class="form-select" id="chartType">
+                        <option value="bar">Bar Chart</option>
+                        <option value="line">Line Chart</option>
+                        <option value="pie">Pie Chart</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Chart Title</label>
+                    <input type="text" class="form-input" id="chartTitle" placeholder="Enter chart title">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">X-Axis Column</label>
+                    <select class="form-select" id="xColumn">
+                        <option value="">Select column...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Y-Axis Columns</label>
+                    <div id="yColumns">
+                        <!-- Will be populated dynamically -->
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="closeModal('chartModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Create Chart</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Formula Modal -->
+    <div id="formulaModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Apply Formulas</h2>
+                <span class="close" onclick="closeModal('formulaModal')">&times;</span>
+            </div>
+            <form id="formulaForm">
+                <div class="form-group">
+                    <label class="form-label">New Column Name</label>
+                    <input type="text" class="form-input" id="newColumnName" placeholder="Enter column name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Formula</label>
+                    <input type="text" class="form-input" id="formulaExpression" placeholder="e.g., =SUM(A:A)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Available Functions</label>
+                    <div style="font-size: 0.9rem; color: #666;">
+                        SUM(range), AVERAGE(range), COUNT(range), MAX(range), MIN(range)
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="closeModal('formulaModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Apply Formula</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Batch Process Modal -->
+    <div id="batchModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Batch Processing</h2>
+                <span class="close" onclick="closeModal('batchModal')">&times;</span>
+            </div>
+            <form id="batchForm">
+                <div class="form-group">
+                    <label class="form-label">Select Operations</label>
+                    <div>
+                        <input type="checkbox" id="batchAnalyze" checked> Analyze Data<br>
+                        <input type="checkbox" id="batchClean" checked> Clean Data<br>
+                        <input type="checkbox" id="batchExport"> Export Results<br>
+                        <input type="checkbox" id="batchChart"> Generate Charts
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Export Format</label>
+                    <select class="form-select" id="batchExportFormat">
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                        <option value="excel">Excel</option>
+                    </select>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="closeModal('batchModal')">Cancel</button>
+                    <button type="submit" class="btn-primary">Start Batch Processing</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentSessionId = null;
+        let currentFileInfo = null;
+        let ws = null;
+        let updateCounter = 0;
+
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+                updateStatus('serverStatus', 'Connected', 'online');
+                addUpdate('WebSocket connection established');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+            
+            ws.onclose = function() {
+                console.log('WebSocket disconnected');
+                updateStatus('serverStatus', 'Disconnected', 'offline');
+                addUpdate('WebSocket connection lost');
+                
+                // Reconnect after 5 seconds
+                setTimeout(initWebSocket, 5000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                updateStatus('serverStatus', 'Error', 'offline');
+            };
+        }
+
+        // Handle WebSocket messages
+        function handleWebSocketMessage(data) {
+            switch(data.type) {
+                case 'status_update':
+                    updateSystemStatus(data.data);
+                    break;
+                case 'task_update':
+                    updateTaskStatus(data.data);
+                    break;
+                case 'progress_update':
+                    updateProgress(data.data);
+                    break;
+                case 'notification':
+                    showNotification(data.message, data.level);
+                    break;
+                case 'real_time_data':
+                    updateRealTimeData(data.data);
+                    break;
+            }
+        }
+
+        // Update system status
+        function updateSystemStatus(status) {
+            updateStatus('kernelStatus', status.kernel ? 'Running' : 'Stopped', status.kernel ? 'online' : 'offline');
+            updateStatus('cloudStatus', status.cloud ? 'Available' : 'Unavailable', status.cloud ? 'online' : 'warning');
+            document.getElementById('activeTasks').textContent = status.activeTasks || 0;
+            document.getElementById('memoryUsage').textContent = `${(status.memoryUsage || 0).toFixed(1)} MB`;
+        }
+
+        // Update task status
+        function updateTaskStatus(taskData) {
+            addUpdate(`Task ${taskData.name}: ${taskData.status}`);
+        }
+
+        // Update progress
+        function updateProgress(progressData) {
+            const progressBar = document.getElementById('progressFill');
+            if (progressBar) {
+                progressBar.style.width = `${progressData.percentage}%`;
+            }
+        }
+
+        // Add real-time update
+        function addUpdate(message) {
+            const updateList = document.getElementById('updateList');
+            const updateItem = document.createElement('div');
+            updateItem.className = 'update-item';
+            updateItem.innerHTML = `
+                <span>${message}</span>
+                <span class="update-time">${new Date().toLocaleTimeString()}</span>
+            `;
+            
+            updateList.insertBefore(updateItem, updateList.firstChild);
+            
+            // Keep only last 10 updates
+            while (updateList.children.length > 10) {
+                updateList.removeChild(updateList.lastChild);
+            }
+        }
+
+        // Update status indicator
+        function updateStatus(elementId, text, status) {
+            document.getElementById(elementId).textContent = text;
+            const indicator = document.getElementById(elementId.replace('Status', 'Indicator'));
+            indicator.className = `status-indicator status-${status}`;
+        }
+
+        // Show notification
+        function showNotification(message, level = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${level}`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+
+        // File upload handling
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const fileInfo = document.getElementById('fileInfo');
+        const actions = document.getElementById('actions');
+        const results = document.getElementById('results');
+
+        // Drag and drop functionality
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(Array.from(files));
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(Array.from(e.target.files));
+            }
+        });
+
+        async function handleFileUpload(files) {
+            showLoading();
+            hideResults();
+            showProgress();
+
+            try {
+                const formData = new FormData();
+                files.forEach(file => {
+                    formData.append('files', file);
+                });
+
+                const response = await fetch('/api/excel/batch', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentFileInfo = result.results;
+                    currentSessionId = generateSessionId();
+                    displayFileInfo(result.results);
+                    showActions();
+                    showSuccess(`Successfully processed ${files.length} file(s)!`);
+                    addUpdate(`Processed ${files.length} file(s)`);
+                } else {
+                    showError(result.error.message || 'Upload failed');
+                }
+            } catch (error) {
+                showError('Upload failed: ' + error.message);
+            } finally {
+                hideLoading();
+                hideProgress();
+            }
+        }
+
+        function displayFileInfo(fileResults) {
+            const fileDetails = document.getElementById('fileDetails');
+            fileDetails.innerHTML = '';
+
+            fileResults.forEach((result, index) => {
+                if (result.success) {
+                    const div = document.createElement('div');
+                    div.className = 'info-item';
+                    div.innerHTML = `
+                        <span class="info-label">File ${index + 1}:</span>
+                        <span class="info-value">${result.file} - ${result.data.total_sheets} sheets</span>
+                    `;
+                    fileDetails.appendChild(div);
+                }
+            });
+
+            fileInfo.classList.add('show');
+        }
+
+        async function analyzeData() {
+            if (!currentSessionId || !currentFileInfo) return;
+
+            showLoading();
+            hideResults();
+
+            try {
+                const sheetName = 'Sheet1'; // Analyze first sheet
+                const response = await fetch(`/api/excel/${currentSessionId}/analyze/${sheetName}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    displayAnalysis(result.analysis);
+                    showSuccess('Data analysis completed successfully!');
+                    addUpdate('Data analysis completed');
+                } else {
+                    showError(result.error.message || 'Analysis failed');
+                }
+            } catch (error) {
+                showError('Analysis failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayAnalysis(analysis) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <div class="result-section">
+                    <div class="result-title">Data Analysis Results</div>
+                    <div class="info-item">
+                        <span class="info-label">Total Rows:</span>
+                        <span class="info-value">${analysis.basic_info.rows}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Total Columns:</span>
+                        <span class="info-value">${analysis.basic_info.columns}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Memory Usage:</span>
+                        <span class="info-value">${(analysis.basic_info.memory_usage / 1024).toFixed(2)} KB</span>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-title">Data Quality</div>
+                    <div class="info-item">
+                        <span class="info-label">Duplicate Rows:</span>
+                        <span class="info-value">${analysis.data_quality.duplicate_rows}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Empty Rows:</span>
+                        <span class="info-value">${analysis.data_quality.empty_rows}</span>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-title">Recommendations</div>
+                    ${analysis.recommendations.map(rec => `<div class="warning">${rec}</div>`).join('')}
+                </div>
+            `;
+            resultsDiv.classList.add('show');
+        }
+
+        async function exportData(format) {
+            if (!currentSessionId || !currentFileInfo) return;
+
+            try {
+                const sheetName = 'Sheet1';
+                const response = await fetch(`/api/excel/${currentSessionId}/export/${sheetName}?format=${format}`);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${sheetName}.${format}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showSuccess(`Data exported as ${format.toUpperCase()} successfully!`);
+                    addUpdate(`Exported data as ${format.toUpperCase()}`);
+                } else {
+                    showError('Export failed');
+                }
+            } catch (error) {
+                showError('Export failed: ' + error.message);
+            }
+        }
+
+        // Modal functions
+        function showCleanModal() {
+            document.getElementById('cleanModal').style.display = 'block';
+        }
+
+        function showChartModal() {
+            document.getElementById('chartModal').style.display = 'block';
+        }
+
+        function showFormulaModal() {
+            document.getElementById('formulaModal').style.display = 'block';
+        }
+
+        function showBatchModal() {
+            document.getElementById('batchModal').style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Form handlers
+        document.getElementById('cleanForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const operations = [];
+            
+            if (document.getElementById('removeDuplicates').checked) {
+                operations.push({type: 'remove_duplicates'});
+            }
+            
+            if (document.getElementById('nullStrategy').value !== 'none') {
+                operations.push({
+                    type: 'remove_nulls',
+                    params: {
+                        strategy: document.getElementById('nullStrategy').value,
+                        method: document.getElementById('fillMethod').value
+                    }
+                });
+            }
+            
+            if (document.getElementById('convertTypes').checked) {
+                operations.push({type: 'convert_types'});
+            }
+            
+            await performDataCleaning(operations);
+            closeModal('cleanModal');
+        });
+
+        document.getElementById('chartForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const chartConfig = {
+                type: document.getElementById('chartType').value,
+                title: document.getElementById('chartTitle').value,
+                x_column: document.getElementById('xColumn').value,
+                y_columns: Array.from(document.querySelectorAll('#yColumns input:checked')).map(cb => cb.value)
+            };
+            
+            await createChart(chartConfig);
+            closeModal('chartModal');
+        });
+
+        document.getElementById('formulaForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formulas = {
+                [document.getElementById('newColumnName').value]: document.getElementById('formulaExpression').value
+            };
+            
+            await applyFormulas(formulas);
+            closeModal('formulaModal');
+        });
+
+        // Utility functions
+        function showLoading() {
+            loading.style.display = 'block';
+        }
+
+        function hideLoading() {
+            loading.style.display = 'none';
+        }
+
+        function showProgress() {
+            document.getElementById('uploadProgress').style.display = 'block';
+        }
+
+        function hideProgress() {
+            document.getElementById('uploadProgress').style.display = 'none';
+        }
+
+        function showActions() {
+            actions.style.display = 'grid';
+        }
+
+        function hideResults() {
+            results.classList.remove('show');
+        }
+
+        function showResults() {
+            results.classList.add('show');
+        }
+
+        function showSuccess(message) {
+            showNotification(message, 'success');
+        }
+
+        function showError(message) {
+            showNotification(message, 'error');
+        }
+
+        function generateSessionId() {
+            return 'session_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initWebSocket();
+            
+            // Check system status periodically
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/health');
+                    if (response.ok) {
+                        updateStatus('serverStatus', 'Online', 'online');
+                    } else {
+                        updateStatus('serverStatus', 'Offline', 'offline');
+                    }
+                } catch (error) {
+                    updateStatus('serverStatus', 'Offline', 'offline');
+                }
+            }, 30000);
+        });
+    </script>
+</body>
+</html>
