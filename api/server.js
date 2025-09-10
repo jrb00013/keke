@@ -4,6 +4,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const compression = require('compression');
+const path = require('path');
+const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -35,14 +37,29 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
-        version: process.env.npm_package_version || '1.0.0'
+        version: process.env.npm_package_version || '1.0.0',
+        service: 'Keke Excel Datasheet Tool'
     });
+});
+
+// Root endpoint - serve the main interface
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Use the API routes
@@ -72,6 +89,7 @@ app.use('*', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Keke server running at http://localhost:${port}`);
+    console.log(`Keke Excel Datasheet Tool running at http://localhost:${port}`);
     console.log(`Health check available at http://localhost:${port}/health`);
+    console.log(`Web interface available at http://localhost:${port}`);
 });

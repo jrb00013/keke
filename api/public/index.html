@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keke - Excel Datasheet Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .upload-section {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: #764ba2;
+            background-color: #f8f9ff;
+        }
+
+        .upload-section.dragover {
+            border-color: #764ba2;
+            background-color: #f0f2ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: #555;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .feature-card {
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: #667eea;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .feature-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .feature-description {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .file-info {
+            background: #f0f2ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            color: #333;
+        }
+
+        .actions {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .action-btn {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+        }
+
+        .action-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .result-section {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .error {
+            background: #ffe6e6;
+            color: #d63031;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #d63031;
+        }
+
+        .success {
+            background: #e6ffe6;
+            color: #00b894;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #00b894;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .actions {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Keke</h1>
+            <p>Advanced Excel Datasheet Processing Tool</p>
+        </div>
+
+        <div class="main-content">
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-icon">📊</div>
+                <div class="upload-text">
+                    Drag and drop your Excel file here, or click to browse
+                </div>
+                <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls,.csv,.json">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Choose File
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Processing your file...</div>
+            </div>
+
+            <div class="file-info" id="fileInfo">
+                <h3>File Information</h3>
+                <div id="fileDetails"></div>
+            </div>
+
+            <div class="actions" id="actions" style="display: none;">
+                <button class="action-btn" onclick="analyzeData()">Analyze Data</button>
+                <button class="action-btn" onclick="showCleanOptions()">Clean Data</button>
+                <button class="action-btn" onclick="showChartOptions()">Create Chart</button>
+                <button class="action-btn" onclick="exportData('csv')">Export CSV</button>
+                <button class="action-btn" onclick="exportData('json')">Export JSON</button>
+                <button class="action-btn" onclick="exportData('excel')">Export Excel</button>
+            </div>
+
+            <div class="results" id="results"></div>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🔍</div>
+                <div class="feature-title">Data Analysis</div>
+                <div class="feature-description">
+                    Comprehensive analysis of your Excel data including statistics, patterns, and quality metrics
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🧹</div>
+                <div class="feature-title">Data Cleaning</div>
+                <div class="feature-description">
+                    Remove duplicates, handle missing values, and convert data types automatically
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📈</div>
+                <div class="feature-title">Chart Generation</div>
+                <div class="feature-description">
+                    Create professional charts and visualizations from your data
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📤</div>
+                <div class="feature-title">Export Options</div>
+                <div class="feature-description">
+                    Export your processed data in multiple formats: CSV, JSON, Excel, and Parquet
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <div class="feature-title">Formula Engine</div>
+                <div class="feature-description">
+                    Apply Excel-like formulas and calculations to your data
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔄</div>
+                <div class="feature-title">Batch Processing</div>
+                <div class="feature-description">
+                    Process multiple files simultaneously for efficient data handling
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        let currentFileInfo = null;
+
+        // File upload handling
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const fileInfo = document.getElementById('fileInfo');
+        const actions = document.getElementById('actions');
+        const results = document.getElementById('results');
+
+        // Drag and drop functionality
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+
+        async function handleFileUpload(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showLoading();
+            hideResults();
+
+            try {
+                const response = await fetch('/api/excel/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentFileInfo = result.file_info;
+                    currentSessionId = generateSessionId();
+                    displayFileInfo(result.file_info);
+                    showActions();
+                    showSuccess('File uploaded and processed successfully!');
+                } else {
+                    showError(result.error.message || 'Upload failed');
+                }
+            } catch (error) {
+                showError('Upload failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayFileInfo(fileInfo) {
+            const fileDetails = document.getElementById('fileDetails');
+            fileDetails.innerHTML = '';
+
+            const infoItems = [
+                { label: 'File Path', value: fileInfo.file_path },
+                { label: 'Total Sheets', value: fileInfo.total_sheets },
+                { label: 'Loaded At', value: new Date(fileInfo.loaded_at).toLocaleString() }
+            ];
+
+            infoItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'info-item';
+                div.innerHTML = `
+                    <span class="info-label">${item.label}:</span>
+                    <span class="info-value">${item.value}</span>
+                `;
+                fileDetails.appendChild(div);
+            });
+
+            // Add sheet information
+            Object.entries(fileInfo.sheets).forEach(([sheetName, sheetInfo]) => {
+                const div = document.createElement('div');
+                div.className = 'info-item';
+                div.innerHTML = `
+                    <span class="info-label">Sheet "${sheetName}":</span>
+                    <span class="info-value">${sheetInfo.rows} rows × ${sheetInfo.columns} columns</span>
+                `;
+                fileDetails.appendChild(div);
+            });
+
+            fileInfo.classList.add('show');
+        }
+
+        async function analyzeData() {
+            if (!currentSessionId || !currentFileInfo) return;
+
+            showLoading();
+            hideResults();
+
+            try {
+                const sheetName = Object.keys(currentFileInfo.sheets)[0]; // Analyze first sheet
+                const response = await fetch(`/api/excel/${currentSessionId}/analyze/${sheetName}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    displayAnalysis(result.analysis);
+                    showSuccess('Data analysis completed successfully!');
+                } else {
+                    showError(result.error.message || 'Analysis failed');
+                }
+            } catch (error) {
+                showError('Analysis failed: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function displayAnalysis(analysis) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <div class="result-section">
+                    <div class="result-title">Data Analysis Results</div>
+                    <div class="info-item">
+                        <span class="info-label">Total Rows:</span>
+                        <span class="info-value">${analysis.basic_info.rows}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Total Columns:</span>
+                        <span class="info-value">${analysis.basic_info.columns}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Memory Usage:</span>
+                        <span class="info-value">${(analysis.basic_info.memory_usage / 1024).toFixed(2)} KB</span>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-title">Data Quality</div>
+                    <div class="info-item">
+                        <span class="info-label">Duplicate Rows:</span>
+                        <span class="info-value">${analysis.data_quality.duplicate_rows}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Empty Rows:</span>
+                        <span class="info-value">${analysis.data_quality.empty_rows}</span>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-title">Recommendations</div>
+                    ${analysis.recommendations.map(rec => `<div style="margin: 10px 0; padding: 10px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">${rec}</div>`).join('')}
+                </div>
+            `;
+            resultsDiv.classList.add('show');
+        }
+
+        async function exportData(format) {
+            if (!currentSessionId || !currentFileInfo) return;
+
+            try {
+                const sheetName = Object.keys(currentFileInfo.sheets)[0];
+                const response = await fetch(`/api/excel/${currentSessionId}/export/${sheetName}?format=${format}`);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${sheetName}.${format}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showSuccess(`Data exported as ${format.toUpperCase()} successfully!`);
+                } else {
+                    showError('Export failed');
+                }
+            } catch (error) {
+                showError('Export failed: ' + error.message);
+            }
+        }
+
+        function showCleanOptions() {
+            showError('Data cleaning options will be available in the next version');
+        }
+
+        function showChartOptions() {
+            showError('Chart creation options will be available in the next version');
+        }
+
+        function showLoading() {
+            loading.style.display = 'block';
+        }
+
+        function hideLoading() {
+            loading.style.display = 'none';
+        }
+
+        function showActions() {
+            actions.style.display = 'flex';
+        }
+
+        function hideResults() {
+            results.classList.remove('show');
+        }
+
+        function showResults() {
+            results.classList.add('show');
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.textContent = message;
+            results.appendChild(successDiv);
+            showResults();
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            results.appendChild(errorDiv);
+            showResults();
+        }
+
+        function generateSessionId() {
+            return 'session_' + Math.random().toString(36).substr(2, 9);
+        }
+    </script>
+</body>
+</html>
