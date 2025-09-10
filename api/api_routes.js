@@ -10,7 +10,7 @@ const router = express.Router();
 const upload = multer({
     dest: 'uploads/',
     limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB limit
+        fileSize: 50 * 1024 * 1024 // 50MB limit or we can do more if needed I'm not sure
     },
     fileFilter: (req, file, cb) => {
         const allowedTypes = [
@@ -43,7 +43,6 @@ const validateRequest = (req, res, next) => {
 };
 
 // Excel Processing Endpoints
-
 // Upload and load Excel file
 router.post('/excel/upload',
     upload.single('file'),
@@ -63,10 +62,9 @@ router.post('/excel/upload',
             
             // Process file with Python
             const result = await processExcelFile(filePath, originalName);
-            
-            // Clean up uploaded file
+            // Clean up the uploaded file 
             await fs.unlink(filePath);
-            
+            // Result of the file processing
             res.json({
                 success: true,
                 file_info: result,
