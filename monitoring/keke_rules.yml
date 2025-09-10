@@ -1,0 +1,162 @@
+groups:
+- name: keke.rules
+  rules:
+  # High CPU usage alert
+  - alert: HighCPUUsage
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU usage detected"
+      description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+
+  # High memory usage alert
+  - alert: HighMemoryUsage
+    expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage detected"
+      description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+
+  # Disk space alert
+  - alert: LowDiskSpace
+    expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 90
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Low disk space"
+      description: "Disk space is below 10% on {{ $labels.instance }}"
+
+  # Keke application down
+  - alert: KekeAppDown
+    expr: up{job="keke-app"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Keke application is down"
+      description: "Keke application has been down for more than 1 minute"
+
+  # High response time
+  - alert: HighResponseTime
+    expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High response time"
+      description: "95th percentile response time is above 2 seconds"
+
+  # High error rate
+  - alert: HighErrorRate
+    expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High error rate"
+      description: "Error rate is above 5% for more than 5 minutes"
+
+  # FreeRTOS task queue full
+  - alert: FreeRTOSTaskQueueFull
+    expr: freertos_task_queue_size / freertos_task_queue_capacity > 0.9
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "FreeRTOS task queue nearly full"
+      description: "FreeRTOS task queue is more than 90% full"
+
+  # Redis connection issues
+  - alert: RedisConnectionIssues
+    expr: redis_connected_clients == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Redis connection issues"
+      description: "No Redis clients connected"
+
+  # MongoDB connection issues
+  - alert: MongoDBConnectionIssues
+    expr: mongodb_connections_current == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "MongoDB connection issues"
+      description: "No MongoDB connections active"
+
+  # PostgreSQL connection issues
+  - alert: PostgreSQLConnectionIssues
+    expr: postgresql_stat_activity_count == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "PostgreSQL connection issues"
+      description: "No PostgreSQL connections active"
+
+  # High file upload rate
+  - alert: HighFileUploadRate
+    expr: rate(keke_file_uploads_total[5m]) > 10
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High file upload rate"
+      description: "File upload rate is above 10 files per minute"
+
+  # Large file processing time
+  - alert: LongFileProcessingTime
+    expr: histogram_quantile(0.95, rate(keke_file_processing_duration_seconds_bucket[5m])) > 300
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Long file processing time"
+      description: "95th percentile file processing time is above 5 minutes"
+
+  # Cloud service failures
+  - alert: CloudServiceFailure
+    expr: keke_cloud_service_status == 0
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Cloud service failure"
+      description: "Cloud service {{ $labels.service }} is not responding"
+
+  # Memory leak detection
+  - alert: MemoryLeak
+    expr: increase(node_memory_MemTotal_bytes[1h]) > 0 and increase(node_memory_MemAvailable_bytes[1h]) < 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Potential memory leak"
+      description: "Memory usage is increasing without corresponding availability increase"
+
+  # Pod restart alert
+  - alert: PodRestart
+    expr: increase(kube_pod_container_status_restarts_total[1h]) > 0
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Pod restarted"
+      description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted"
+
+  # Certificate expiration
+  - alert: CertificateExpiration
+    expr: (ssl_cert_not_after - time()) / 86400 < 30
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: "SSL certificate expiring soon"
+      description: "SSL certificate for {{ $labels.instance }} expires in {{ $value }} days"
