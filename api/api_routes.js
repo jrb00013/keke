@@ -331,6 +331,132 @@ router.post('/excel/:sessionId/transform/:sheetName',
     }
 );
 
+// Machine Learning Endpoints
+
+// Predict values using ML
+router.post('/excel/:sessionId/predict/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('target_column').isLength({ min: 1 }).withMessage('Target column is required'),
+    body('feature_columns').isArray().withMessage('Feature columns must be an array'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { target_column, feature_columns, model_type = 'auto' } = req.body;
+            
+            const result = await predictValues(sessionId, sheetName, target_column, feature_columns, model_type);
+            
+            res.json({
+                success: true,
+                prediction: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Cluster data
+router.post('/excel/:sessionId/cluster/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('feature_columns').isArray().withMessage('Feature columns must be an array'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { feature_columns, n_clusters = 3, algorithm = 'kmeans' } = req.body;
+            
+            const result = await clusterData(sessionId, sheetName, feature_columns, n_clusters, algorithm);
+            
+            res.json({
+                success: true,
+                clustering: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Detect anomalies
+router.post('/excel/:sessionId/anomalies/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('feature_columns').isArray().withMessage('Feature columns must be an array'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { feature_columns, method = 'isolation_forest' } = req.body;
+            
+            const result = await detectAnomalies(sessionId, sheetName, feature_columns, method);
+            
+            res.json({
+                success: true,
+                anomalies: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Analyze correlations
+router.post('/excel/:sessionId/correlation/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('columns').isArray().withMessage('Columns must be an array'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { columns } = req.body;
+            
+            const result = await analyzeCorrelations(sessionId, sheetName, columns);
+            
+            res.json({
+                success: true,
+                correlation: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Get ML recommendations
+router.get('/excel/:sessionId/ml-recommendations/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            
+            const result = await getMLRecommendations(sessionId, sheetName);
+            
+            res.json({
+                success: true,
+                recommendations: result,
+                timestamp: new Date().toISOString()
+            });
+            
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
 // Batch process multiple files
 router.post('/excel/batch',
     upload.array('files', 10), // Max 10 files
@@ -757,6 +883,188 @@ async function transformSheetData(sessionId, sheetName, transformations) {
                 reject(new Error(`Python process failed: ${error}`));
             }
         });
+    });
+}
+
+// Machine Learning helper functions
+async function predictValues(sessionId, sheetName, targetColumn, featureColumns, modelType) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'ml_processor.py'),
+            'predict',
+            sheetName,
+            targetColumn,
+            JSON.stringify(featureColumns),
+            modelType
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function clusterData(sessionId, sheetName, featureColumns, nClusters, algorithm) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'ml_processor.py'),
+            'cluster',
+            sheetName,
+            JSON.stringify(featureColumns),
+            nClusters.toString()
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function detectAnomalies(sessionId, sheetName, featureColumns, method) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'ml_processor.py'),
+            'anomalies',
+            sheetName,
+            JSON.stringify(featureColumns)
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function analyzeCorrelations(sessionId, sheetName, columns) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'ml_processor.py'),
+            'correlation',
+            sheetName,
+            JSON.stringify(columns)
+        ]);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    const result = JSON.parse(output);
+                    resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function getMLRecommendations(sessionId, sheetName) {
+    return new Promise((resolve, reject) => {
+        // First get data summary
+        getDataSummary(sessionId).then(summary => {
+            const python = spawn('python3', [
+                path.join(__dirname, 'ml_processor.py'),
+                'recommendations',
+                sheetName,
+                JSON.stringify(summary)
+            ]);
+            
+            let output = '';
+            let error = '';
+            
+            python.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+            
+            python.stderr.on('data', (data) => {
+                error += data.toString();
+            });
+            
+            python.on('close', (code) => {
+                if (code === 0) {
+                    try {
+                        const result = JSON.parse(output);
+                        resolve(result);
+                    } catch (parseError) {
+                        reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                    }
+                } else {
+                    reject(new Error(`Python process failed: ${error}`));
+                }
+            });
+        }).catch(reject);
     });
 }
 
