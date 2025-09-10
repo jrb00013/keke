@@ -1,0 +1,153 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keke-app
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: keke-excel-tool
+      component: app
+  template:
+    metadata:
+      labels:
+        app: keke-excel-tool
+        component: app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: keke-app
+        image: keke-excel-tool:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: KEKE_ENV
+        - name: HOST
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: HOST
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: PORT
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: DEBUG
+        - name: AI_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: AI_ENABLED
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: keke-secrets
+              key: OPENAI_API_KEY
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: keke-secrets
+              key: ANTHROPIC_API_KEY
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: REDIS_URL
+        - name: MONGODB_URL
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: MONGODB_URL
+        - name: MAX_FILE_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: MAX_FILE_SIZE
+        - name: WORKER_PROCESSES
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: WORKER_PROCESSES
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: LOG_LEVEL
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: uploads
+          mountPath: /app/uploads
+        - name: logs
+          mountPath: /app/logs
+        - name: data
+          mountPath: /app/data
+        - name: temp
+          mountPath: /app/temp
+        - name: models
+          mountPath: /app/models
+        - name: cache
+          mountPath: /app/cache
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: keke-uploads-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: keke-logs-pvc
+      - name: data
+        persistentVolumeClaim:
+          claimName: keke-data-pvc
+      - name: temp
+        emptyDir: {}
+      - name: models
+        persistentVolumeClaim:
+          claimName: keke-models-pvc
+      - name: cache
+        emptyDir: {}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

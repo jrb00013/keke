@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: keke-service
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: app
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: keke-excel-tool
+    component: app
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: keke-excel-tool
+    component: redis
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: mongodb
+spec:
+  type: ClusterIP
+  ports:
+  - port: 27017
+    targetPort: 27017
+    protocol: TCP
+    name: mongodb
+  selector:
+    app: keke-excel-tool
+    component: mongodb
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: keke
+  labels:
+    app: keke-excel-tool
+    component: postgres
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: keke-excel-tool
+    component: postgres
