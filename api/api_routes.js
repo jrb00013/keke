@@ -64,6 +64,62 @@ const validateRequest = (req, res, next) => {
     next();
 };
 
+// =============================================================================
+// FreeRTOS kernel (queues, semaphores, mutex, watchdog)
+// =============================================================================
+
+router.get('/rtos/status', async (req, res, next) => {
+    try {
+        const stats = await runRtosBridge('status');
+        res.json({ success: true, rtos: stats, timestamp: new Date().toISOString() });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/rtos/boot', async (req, res, next) => {
+    try {
+        const result = await runRtosBridge('boot', 'true');
+        res.json({ success: true, ...result, timestamp: new Date().toISOString() });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/rtos/watchdog/feed', async (req, res, next) => {
+    try {
+        const name = req.body?.name || 'system_watchdog';
+        const result = await runRtosBridge('feed_watchdog', name);
+        res.json({ success: true, ...result, timestamp: new Date().toISOString() });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post('/rtos/excel/enqueue',
+    body('file_path').isLength({ min: 1 }),
+    body('operations').isArray(),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { file_path, operations } = req.body;
+            const result = await runRtosBridge('enqueue', file_path, JSON.stringify(operations));
+            res.json({ success: true, ...result, timestamp: new Date().toISOString() });
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+router.get('/rtos/excel/results', async (req, res, next) => {
+    try {
+        const results = await runRtosBridge('results');
+        res.json({ success: true, results, timestamp: new Date().toISOString() });
+    } catch (error) {
+        next(error);
+    }
+});
+
 // Excel Processing Endpoints
 // Upload and load Excel file
 router.post('/excel/upload',
@@ -2057,6 +2113,39 @@ async function getAIVisualizationSuggestions(sessionId, sheetName) {
                 }
             });
         }).catch(reject);
+    });
+}
+
+async function runRtosBridge(command, ...args) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'rtos_bridge.py'),
+            command,
+            ...args
+        ]);
+
+        let output = '';
+        let error = '';
+
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    resolve(JSON.parse(output));
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse RTOS output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`RTOS bridge failed: ${error || output}`));
+            }
+        });
     });
 }
 

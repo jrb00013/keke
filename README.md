@@ -8,6 +8,7 @@ Keke is a web-based tool for uploading, analyzing, cleaning, charting, and expor
 - **Analyze**, **clean**, **transform**, **formulas**, **export**
 - **Charts** in the browser (Chart.js) plus Excel chart download
 - **ML** (scikit-learn): predict, cluster, anomalies, correlation
+- **FreeRTOS kernel** (Python): tasks, semaphores, mutex (`house_lock`), message queues, watchdog
 - **AI endpoints** are disabled by default (`AI_ENABLED=false`)
 
 ## Quick start

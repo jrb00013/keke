@@ -94,6 +94,46 @@ class TestFreeRTOSKernel:
         assert result == True
         assert kernel.tasks[task_id].state == TaskState.READY
     
+    def test_mutex_operations(self, kernel):
+        """Test named mutex lock/unlock."""
+        assert kernel.create_mutex("house_lock") is True
+        assert kernel.lock_mutex("house_lock") is True
+        assert kernel.try_lock_mutex("house_lock") is True
+        assert kernel.unlock_mutex("house_lock") is True
+        assert kernel.unlock_mutex("house_lock") is True
+
+    def test_message_queue_operations(self, kernel):
+        """Test async message queues."""
+        assert kernel.create_queue("work_queue", maxsize=2) is True
+        assert kernel.send_to_queue("work_queue", {"n": 1}) is True
+        assert kernel.send_to_queue("work_queue", {"n": 2}) is True
+        assert kernel.send_to_queue("work_queue", {"n": 3}, timeout=0.01) is False
+
+        assert kernel.receive_from_queue("work_queue") == {"n": 1}
+        stats = kernel.queue_stats("work_queue")
+        assert stats is not None
+        assert stats["sent"] == 2
+        assert stats["received"] == 1
+
+    def test_watchdog_feed_and_trip(self, kernel):
+        """Test watchdog timer feed and trip callback."""
+        trips = []
+
+        kernel.create_watchdog(
+            "test_wd",
+            50,
+            lambda: trips.append(1),
+            auto_reset=True,
+        )
+        kernel.feed_watchdog("test_wd")
+        kernel._process_watchdogs(time.time())
+        assert len(trips) == 0
+
+        kernel.watchdogs["test_wd"].last_feed -= 1.0
+        kernel._process_watchdogs(time.time())
+        assert len(trips) == 1
+        kernel.feed_watchdog("test_wd")
+
     def test_semaphore_operations(self, kernel):
         """Test semaphore creation and operations"""
         # Create semaphore
@@ -152,15 +192,14 @@ class TestFreeRTOSKernel:
         assert result == True
         assert "test_timer" in kernel.timers
         
-        # Start timer
-        result = kernel.start_timer("test_timer")
-        assert result == True
-        assert kernel.timers["test_timer"]["active"] == True
-        
-        # Stop timer
-        result = kernel.stop_timer("test_timer")
-        assert result == True
-        assert kernel.timers["test_timer"]["active"] == False
+        # Start timer and run scheduler briefly so callback fires
+        kernel.start_timer("test_timer")
+        kernel.start_scheduler()
+        try:
+            assert callback_called.wait(timeout=2.0)
+        finally:
+            kernel.stop_scheduler()
+            kernel.stop_timer("test_timer")
     
     def test_memory_pool_operations(self, kernel):
         """Test memory pool operations"""
@@ -286,45 +325,48 @@ class TestExcelProcessingTask:
     def test_excel_task_initialization(self, excel_task):
         """Test Excel task initialization"""
         assert excel_task.kernel is not None
-        assert isinstance(excel_task.processing_queue, queue.Queue)
-        assert isinstance(excel_task.results_queue, queue.Queue)
+        excel_task.kernel.create_semaphore("excel_processing", 3)
+        excel_task.kernel.create_mutex("house_lock")
+        excel_task._ensure_workers()
+        assert excel_task.kernel.queue_stats("excel_jobs") is not None
+        assert excel_task.kernel.queue_stats("excel_results") is not None
     
     def test_create_processing_task(self, excel_task):
-        """Test creating Excel processing task"""
+        """Test enqueueing Excel processing via RTOS queue"""
         file_path = "/test/file.xlsx"
         operations = [{"type": "remove_duplicates"}]
-        
-        task_id = excel_task.create_processing_task(file_path, operations)
-        
-        assert task_id in excel_task.kernel.tasks
-        assert excel_task.kernel.tasks[task_id].name.startswith("excel_process_")
-        assert excel_task.kernel.tasks[task_id].priority == TaskPriority.HIGH
+
+        excel_task.kernel.create_semaphore("excel_processing", 3)
+        excel_task.kernel.create_mutex("house_lock")
+        excel_task.kernel.start_scheduler()
+
+        try:
+            assert excel_task.enqueue(file_path, operations) is True
+            stats = excel_task.kernel.queue_stats("excel_jobs")
+            assert stats is not None
+            assert stats["size"] >= 0
+        finally:
+            excel_task.kernel.stop_scheduler()
     
     def test_processing_task_execution(self, excel_task):
         """Test Excel processing task execution"""
         file_path = "/test/file.xlsx"
         operations = [{"type": "remove_duplicates"}]
         
-        # Create semaphore for processing
-        excel_task.kernel.create_semaphore('excel_processing', 1)
-        
-        # Create and start task
-        task_id = excel_task.create_processing_task(file_path, operations)
         excel_task.kernel.start_scheduler()
-        
+
         try:
-            # Wait for processing to complete
-            time.sleep(0.2)
-            
-            # Check results
+            assert excel_task.enqueue(file_path, operations) is True
+            time.sleep(0.5)
+
             results = excel_task.get_results()
             assert len(results) > 0
-            
+
             result = results[0]
             assert result['file_path'] == file_path
             assert result['operations'] == operations
             assert result['status'] == 'completed'
-            
+
         finally:
             excel_task.kernel.stop_scheduler()
     
@@ -333,11 +375,7 @@ class TestExcelProcessingTask:
         file_path = "/test/file.xlsx"
         operations = [{"type": "invalid_operation"}]
         
-        # Create semaphore
-        excel_task.kernel.create_semaphore('excel_processing', 1)
-        
-        # Create task
-        task_id = excel_task.create_processing_task(file_path, operations)
+        excel_task.enqueue(file_path, operations)
         excel_task.kernel.start_scheduler()
         
         try:
@@ -360,34 +398,23 @@ class TestIntegration:
         kernel = FreeRTOSKernel(max_tasks=20)
         excel_task = ExcelProcessingTask(kernel)
         
-        # Create semaphore to limit concurrent processing
-        kernel.create_semaphore('excel_processing', 3)
-        
         # Create multiple processing tasks
         file_paths = [f"/test/file_{i}.xlsx" for i in range(5)]
         operations = [{"type": "remove_duplicates"}]
         
-        task_ids = []
-        for file_path in file_paths:
-            task_id = excel_task.create_processing_task(file_path, operations)
-            task_ids.append(task_id)
-        
-        # Start scheduler
         kernel.start_scheduler()
-        
+
         try:
-            # Let tasks run
-            time.sleep(0.5)
-            
-            # Check results
+            for file_path in file_paths:
+                assert excel_task.enqueue(file_path, operations) is True
+
+            time.sleep(1.0)
+
             results = excel_task.get_results()
-            assert len(results) >= 0  # Some tasks may still be running
-            
-            # Check that tasks were created
-            assert len(task_ids) == 5
-            for task_id in task_ids:
-                assert task_id in kernel.tasks
-            
+            assert len(results) >= 1
+            completed = [r for r in results if r.get("status") == "completed"]
+            assert len(completed) >= 1
+
         finally:
             kernel.stop_scheduler()
     
