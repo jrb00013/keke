@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Keke - Excel Datasheet Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -870,7 +871,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let currentSessionId = null;
         let currentFileInfo = null;
@@ -925,7 +925,7 @@
 
                 if (result.success) {
                     currentFileInfo = result.file_info;
-                    currentSessionId = generateSessionId();
+                    currentSessionId = result.session_id;
                     displayFileInfo(result.file_info);
                     showActions();
                     showSuccess('File uploaded and processed successfully!');
@@ -1247,9 +1247,7 @@
             showResults();
         }
 
-        function generateSessionId() {
-            return 'session_' + Math.random().toString(36).substr(2, 9);
-        }
+        let activeChart = null;
 
         // Modal handling functions
         function closeModal(modalId) {
@@ -1290,21 +1288,21 @@
             try {
                 showLoading();
                 const sheetName = Object.keys(currentFileInfo.sheets)[0];
-                const response = await fetch(`/api/excel/${currentSessionId}/chart/${sheetName}`, {
+                const response = await fetch(`/api/excel/${currentSessionId}/chart-preview/${sheetName}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ chart_config: chartConfig })
                 });
-                
-                if (response.ok) {
-                    const chartData = await response.blob();
-                    displayChart(chartData, chartConfig);
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    displayChart(result.chart);
                     closeModal('chartModal');
                     showNotification('Chart created successfully!', 'success');
                 } else {
-                    showError('Failed to create chart');
+                    showError(result.error?.message || 'Failed to create chart');
                 }
             } catch (error) {
                 showError('Chart creation failed: ' + error.message);
@@ -1458,27 +1456,70 @@
             document.getElementById('columnRenames').style.display = this.checked ? 'block' : 'none';
         });
 
-        function displayChart(chartData, config) {
-            document.getElementById('chartDisplayTitle').textContent = config.title;
+        function displayChart(chartPayload) {
+            document.getElementById('chartDisplayTitle').textContent = chartPayload.title;
             document.getElementById('chartDisplayModal').style.display = 'block';
-            
-            // For now, we'll show a placeholder since we need to implement chart rendering
+
             const canvas = document.getElementById('chartCanvas');
             const ctx = canvas.getContext('2d');
-            
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw placeholder
-            ctx.fillStyle = '#667eea';
-            ctx.font = '20px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${config.title}`, canvas.width / 2, canvas.height / 2);
-            ctx.fillText(`Chart Type: ${config.type}`, canvas.width / 2, canvas.height / 2 + 30);
+
+            if (activeChart) {
+                activeChart.destroy();
+            }
+
+            const chartType = chartPayload.type === 'line' ? 'line' : (chartPayload.type === 'pie' ? 'pie' : 'bar');
+            const colors = ['#667eea', '#764ba2', '#48bb78', '#ed8936', '#4299e1'];
+
+            activeChart = new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: chartPayload.labels,
+                    datasets: chartPayload.datasets.map((dataset, index) => ({
+                        label: dataset.label,
+                        data: dataset.data,
+                        backgroundColor: colors[index % colors.length] + '99',
+                        borderColor: colors[index % colors.length],
+                        borderWidth: 2,
+                        fill: chartType === 'line'
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: { display: true, text: chartPayload.title }
+                    }
+                }
+            });
         }
 
-        function downloadChart() {
-            showNotification('Chart download feature coming soon!', 'info');
+        async function downloadChart() {
+            if (!currentSessionId || !currentFileInfo) return;
+            const sheetName = Object.keys(currentFileInfo.sheets)[0];
+            const chartType = document.getElementById('chartType').value;
+            const chartTitle = document.getElementById('chartTitle').value;
+            const xColumn = document.getElementById('xColumn').value;
+            const yColumns = Array.from(document.getElementById('yColumns').selectedOptions).map(option => option.value);
+            const chartConfig = { type: chartType, title: chartTitle, x_column: xColumn, y_columns: yColumns };
+
+            const response = await fetch(`/api/excel/${currentSessionId}/chart/${sheetName}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chart_config: chartConfig })
+            });
+
+            if (!response.ok) {
+                showNotification('Chart download failed', 'error');
+                return;
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `chart_${sheetName}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
         }
 
         function showNotification(message, type = 'info') {

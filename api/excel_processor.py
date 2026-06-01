@@ -14,6 +14,8 @@ from datetime import datetime
 import re
 from pathlib import Path
 
+from session_store import load_session, save_session, session_exists
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,7 +29,54 @@ class ExcelProcessor:
         self.workbook = None
         self.dataframes = {}
         self.current_sheet = None
-        self.supported_formats = ['.xlsx', '.xls', '.csv', '.json']
+        self.session_id = None
+        self._metadata = {}
+        self.supported_formats = ['.xlsx', '.xls', '.csv', '.json', '.parquet']
+
+    @classmethod
+    def from_session(cls, session_id: str) -> "ExcelProcessor":
+        dataframes, metadata = load_session(session_id)
+        processor = cls()
+        processor.session_id = session_id
+        processor.dataframes = dataframes
+        processor._metadata = metadata
+        return processor
+
+    def persist(self) -> None:
+        if self.session_id:
+            save_session(self.session_id, self.dataframes, self._metadata)
+
+    @staticmethod
+    def _sheet_summary(df: pd.DataFrame) -> Dict[str, Any]:
+        return {
+            'rows': len(df),
+            'columns': len(df.columns),
+            'column_names': df.columns.tolist(),
+            'data_types': {col: str(dtype) for col, dtype in df.dtypes.items()},
+            'has_nulls': df.isnull().sum().to_dict(),
+            'memory_usage': int(df.memory_usage(deep=True).sum()),
+        }
+
+    def load_file_into_session(
+        self, file_path: str, session_id: str, original_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        result = self.load_file(file_path)
+        self.session_id = session_id
+        self._metadata = {
+            'original_name': original_name or Path(file_path).name,
+            'file_path': file_path,
+            'sheet_names': result['sheet_names'],
+            'total_sheets': result['total_sheets'],
+            'loaded_at': result['loaded_at'],
+            'sheets': {
+                name: self._sheet_summary(self.dataframes[name])
+                for name in result['sheet_names']
+            },
+        }
+        self.persist()
+        result['session_id'] = session_id
+        result['sheets'] = self._metadata['sheets']
+        return result
         
     def load_file(self, file_path: str, sheet_name: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -42,6 +91,8 @@ class ExcelProcessor:
                 return self._load_json(file_path)
             elif file_ext in ['.xlsx', '.xls']:
                 return self._load_excel(file_path, sheet_name)
+            elif file_ext == '.parquet':
+                return self._load_parquet(file_path)
             else:
                 raise ValueError(f"Unsupported file format: {file_ext}")
                 
@@ -69,16 +120,21 @@ class ExcelProcessor:
         
         for name, df in excel_data.items():
             self.dataframes[name] = df
-            result['sheets'][name] = {
-                'rows': len(df),
-                'columns': len(df.columns),
-                'column_names': df.columns.tolist(),
-                'data_types': df.dtypes.to_dict(),
-                'has_nulls': df.isnull().sum().to_dict(),
-                'memory_usage': df.memory_usage(deep=True).sum()
-            }
+            result['sheets'][name] = self._sheet_summary(df)
         
         return result
+
+    def _load_parquet(self, file_path: str) -> Dict[str, Any]:
+        """Load Parquet file as a single sheet."""
+        df = pd.read_parquet(file_path)
+        self.dataframes['Sheet1'] = df
+        return {
+            'file_path': file_path,
+            'sheet_names': ['Sheet1'],
+            'sheets': {'Sheet1': self._sheet_summary(df)},
+            'total_sheets': 1,
+            'loaded_at': datetime.now().isoformat(),
+        }
     
     def _load_csv(self, file_path: str) -> Dict[str, Any]:
         """Load CSV file"""
@@ -88,16 +144,7 @@ class ExcelProcessor:
         return {
             'file_path': file_path,
             'sheet_names': ['Sheet1'],
-            'sheets': {
-                'Sheet1': {
-                    'rows': len(df),
-                    'columns': len(df.columns),
-                    'column_names': df.columns.tolist(),
-                    'data_types': df.dtypes.to_dict(),
-                    'has_nulls': df.isnull().sum().to_dict(),
-                    'memory_usage': df.memory_usage(deep=True).sum()
-                }
-            },
+            'sheets': {'Sheet1': self._sheet_summary(df)},
             'total_sheets': 1,
             'loaded_at': datetime.now().isoformat()
         }
@@ -119,16 +166,7 @@ class ExcelProcessor:
         return {
             'file_path': file_path,
             'sheet_names': ['Sheet1'],
-            'sheets': {
-                'Sheet1': {
-                    'rows': len(df),
-                    'columns': len(df.columns),
-                    'column_names': df.columns.tolist(),
-                    'data_types': df.dtypes.to_dict(),
-                    'has_nulls': df.isnull().sum().to_dict(),
-                    'memory_usage': df.memory_usage(deep=True).sum()
-                }
-            },
+            'sheets': {'Sheet1': self._sheet_summary(df)},
             'total_sheets': 1,
             'loaded_at': datetime.now().isoformat()
         }
@@ -319,8 +357,40 @@ class ExcelProcessor:
             'rows_removed': original_shape[0] - df.shape[0],
             'columns_removed': original_shape[1] - df.shape[1]
         }
-        
+        if self.session_id and sheet_name in self._metadata.get('sheets', {}):
+            self._metadata['sheets'][sheet_name] = self._sheet_summary(df)
+        self.persist()
         return results
+
+    def get_chart_preview(self, sheet_name: str, chart_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Return chart data suitable for Chart.js rendering."""
+        if sheet_name not in self.dataframes:
+            raise ValueError(f"Sheet '{sheet_name}' not found")
+
+        df = self.dataframes[sheet_name]
+        chart_type = chart_config.get('type', 'bar')
+        x_col = chart_config.get('x_column', df.columns[0])
+        y_cols = chart_config.get('y_columns', [df.columns[1]] if len(df.columns) > 1 else [df.columns[0]])
+        if isinstance(y_cols, str):
+            y_cols = [y_cols]
+
+        labels = df[x_col].astype(str).tolist()
+        datasets = []
+        for col in y_cols:
+            if col not in df.columns:
+                raise ValueError(f"Column '{col}' not found")
+            series = pd.to_numeric(df[col], errors='coerce')
+            datasets.append({
+                'label': col,
+                'data': series.fillna(0).tolist(),
+            })
+
+        return {
+            'type': chart_type,
+            'title': chart_config.get('title', f'{chart_type.title()} Chart'),
+            'labels': labels,
+            'datasets': datasets,
+        }
     
     def create_chart(self, sheet_name: str, chart_config: Dict[str, Any]) -> str:
         """
@@ -436,7 +506,9 @@ class ExcelProcessor:
         
         # Update the dataframe
         self.dataframes[sheet_name] = df
-        
+        if self.session_id and sheet_name in self._metadata.get('sheets', {}):
+            self._metadata['sheets'][sheet_name] = self._sheet_summary(df)
+        self.persist()
         return results
     
     def _evaluate_formula(self, df: pd.DataFrame, formula: str) -> Any:
@@ -801,8 +873,16 @@ class ExcelProcessor:
             'rows_changed': original_shape[0] - df.shape[0],
             'columns_changed': original_shape[1] - df.shape[1]
         }
-        
+        if self.session_id and sheet_name in self._metadata.get('sheets', {}):
+            self._metadata['sheets'][sheet_name] = self._sheet_summary(df)
+        self.persist()
         return results
+
+
+def _processor_for_session(session_id: str) -> ExcelProcessor:
+    if not session_exists(session_id):
+        raise FileNotFoundError(f"Session not found: {session_id}")
+    return ExcelProcessor.from_session(session_id)
 
 
 if __name__ == "__main__":
@@ -813,128 +893,90 @@ if __name__ == "__main__":
         sys.exit(1)
     
     command = sys.argv[1]
-    processor = ExcelProcessor()
-    
+
     try:
-        if command == "load_file":
+        if command == "create_session":
+            if len(sys.argv) < 4:
+                print("Usage: python excel_processor.py create_session <session_id> <file_path> [original_name]")
+                sys.exit(1)
+            session_id = sys.argv[2]
+            file_path = sys.argv[3]
+            original_name = sys.argv[4] if len(sys.argv) > 4 else Path(file_path).name
+            processor = ExcelProcessor()
+            result = processor.load_file_into_session(file_path, session_id, original_name)
+            print(json.dumps(result, default=str))
+
+        elif command == "load_file":
             if len(sys.argv) < 3:
                 print("Usage: python excel_processor.py load_file <file_path>")
                 sys.exit(1)
-            
-            file_path = sys.argv[2]
-            result = processor.load_file(file_path)
-            print(json.dumps(result, indent=2))
-            
+            processor = ExcelProcessor()
+            result = processor.load_file(sys.argv[2])
+            print(json.dumps(result, default=str))
+
         elif command == "analyze_data":
-            if len(sys.argv) < 4:
-                print("Usage: python excel_processor.py analyze_data <session_id> <sheet_name>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
-            result = processor.analyze_data(sheet_name)
-            print(json.dumps(result, indent=2))
-            
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
+            processor = _processor_for_session(session_id)
+            print(json.dumps(processor.analyze_data(sheet_name), default=str))
+
         elif command == "clean_data":
-            if len(sys.argv) < 5:
-                print("Usage: python excel_processor.py clean_data <session_id> <sheet_name> <operations_json>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
             operations = json.loads(sys.argv[4])
-            result = processor.clean_data(sheet_name, operations)
-            print(json.dumps(result, indent=2))
-            
-        elif command == "create_chart":
-            if len(sys.argv) < 5:
-                print("Usage: python excel_processor.py create_chart <session_id> <sheet_name> <chart_config_json>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
+            processor = _processor_for_session(session_id)
+            print(json.dumps(processor.clean_data(sheet_name, operations), default=str))
+
+        elif command == "chart_preview":
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
             chart_config = json.loads(sys.argv[4])
-            result = processor.create_chart(sheet_name, chart_config)
-            print(result)
-            
+            processor = _processor_for_session(session_id)
+            print(json.dumps(processor.get_chart_preview(sheet_name, chart_config), default=str))
+
+        elif command == "create_chart":
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
+            chart_config = json.loads(sys.argv[4])
+            processor = _processor_for_session(session_id)
+            sys.stdout.buffer.write(processor.create_chart(sheet_name, chart_config))
+
         elif command == "export_data":
-            if len(sys.argv) < 5:
-                print("Usage: python excel_processor.py export_data <session_id> <sheet_name> <format>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
-            format_type = sys.argv[4]
-            result = processor.export_data(sheet_name, format_type)
-            print(result)
-            
+            session_id, sheet_name, format_type = sys.argv[2], sys.argv[3], sys.argv[4]
+            processor = _processor_for_session(session_id)
+            sys.stdout.buffer.write(processor.export_data(sheet_name, format_type))
+
         elif command == "apply_formulas":
-            if len(sys.argv) < 5:
-                print("Usage: python excel_processor.py apply_formulas <session_id> <sheet_name> <formulas_json>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
             formulas = json.loads(sys.argv[4])
-            result = processor.apply_formulas(sheet_name, formulas)
-            print(json.dumps(result, indent=2))
-            
+            processor = _processor_for_session(session_id)
+            print(json.dumps(processor.apply_formulas(sheet_name, formulas), default=str))
+
         elif command == "get_summary":
-            if len(sys.argv) < 3:
-                print("Usage: python excel_processor.py get_summary <session_id>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            result = processor.get_summary()
-            print(json.dumps(result, indent=2))
-            
+            processor = _processor_for_session(sys.argv[2])
+            print(json.dumps(processor.get_summary(), default=str))
+
         elif command == "get_preview":
-            if len(sys.argv) < 5:
-                print("Usage: python excel_processor.py get_preview <session_id> <sheet_name> <limit>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
-            limit = int(sys.argv[4])
-            result = processor.get_preview(sheet_name, limit)
-            print(json.dumps(result, indent=2))
-            
+            session_id, sheet_name, limit = sys.argv[2], sys.argv[3], int(sys.argv[4])
+            processor = _processor_for_session(session_id)
+            print(json.dumps(processor.get_preview(sheet_name, limit), default=str))
+
         elif command == "get_columns":
-            if len(sys.argv) < 4:
-                print("Usage: python excel_processor.py get_columns <session_id> <sheet_name>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
-            result = processor.get_columns(sheet_name)
-            print(json.dumps(result, indent=2))
-            
+            processor = _processor_for_session(sys.argv[2])
+            print(json.dumps(processor.get_columns(sys.argv[3]), default=str))
+
         elif command == "validate_data":
-            if len(sys.argv) < 5:
-                print("Usage: python excel_processor.py validate_data <session_id> <sheet_name> <rules_json>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
             rules = json.loads(sys.argv[4])
-            result = processor.validate_data(sheet_name, rules)
-            print(json.dumps(result, indent=2))
-            
+            processor = _processor_for_session(session_id)
+            print(json.dumps(processor.validate_data(sheet_name, rules), default=str))
+
         elif command == "transform_data":
-            if len(sys.argv) < 5:
-                print("Usage: python excel_processor.py transform_data <session_id> <sheet_name> <transformations_json>")
-                sys.exit(1)
-            
-            session_id = sys.argv[2]
-            sheet_name = sys.argv[3]
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
             transformations = json.loads(sys.argv[4])
-            result = processor.transform_data(sheet_name, transformations)
-            print(json.dumps(result, indent=2))
-            
+            processor = _processor_for_session(session_id)
+            print(json.dumps(processor.transform_data(sheet_name, transformations), default=str))
+
         else:
-            print(f"Unknown command: {command}")
+            print(f"Unknown command: {command}", file=sys.stderr)
             sys.exit(1)
-            
+
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)

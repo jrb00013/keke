@@ -8,7 +8,8 @@ from unittest.mock import Mock, patch, MagicMock
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'api'))
 
-from excel_processor import ExcelProcessor, AdvancedStockPredictor
+from excel_processor import ExcelProcessor
+from predictor import AdvancedStockPredictor
 
 class TestExcelProcessor:
     """Test suite for ExcelProcessor class"""

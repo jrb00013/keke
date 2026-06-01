@@ -1,12 +1,17 @@
-import pytest
+import os
+import sys
 import time
 import threading
 import queue
 from unittest.mock import Mock, patch
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'api'))
 
-from freertos_integration import (
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'legacy'))
+
+pytest.importorskip('freertos_integration', reason='FreeRTOS code moved to legacy/')
+
+from freertos_integration import (  # noqa: E402
     FreeRTOSKernel, TaskState, TaskPriority, TaskControlBlock,
     ExcelProcessingTask, freertos_kernel, excel_processor
 )

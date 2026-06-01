@@ -152,7 +152,7 @@ class MLProcessor:
             # Scale features
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X)
-            self.scalers[f'{sheet_name}_scaler'] = scaler
+            self.scalers[f'{target_column}_scaler'] = scaler
             
             # Split data
             X_train, X_test, y_train, y_test = train_test_split(
@@ -204,15 +204,13 @@ class MLProcessor:
             # Cross-validation score
             cv_scores = cross_val_score(best_model, X_scaled, y, cv=5)
             
-            # Store model
-            model_key = f"{sheet_name}_{target_column}_{model_type}"
+            model_key = f"{target_column}_{model_type}"
             self.models[model_key] = best_model
-            
-            # Generate AI insights
-            ai_insights = self._generate_ai_insights(
+
+            insights = self._generate_model_insights(
                 df, target_column, feature_columns, metrics, feature_importance, is_classification
             )
-            
+
             return {
                 'model_type': type(best_model).__name__,
                 'target_column': target_column,
@@ -225,7 +223,7 @@ class MLProcessor:
                 'cross_val_std': cv_scores.std(),
                 'predictions': y_pred.tolist(),
                 'prediction_probabilities': y_pred_proba.tolist() if y_pred_proba is not None else None,
-                'ai_insights': ai_insights,
+                'insights': insights,
                 'model_performance': {
                     'train_score': best_model.score(X_train, y_train),
                     'test_score': best_model.score(X_test, y_test),
@@ -238,110 +236,138 @@ class MLProcessor:
             logger.error(f"Error in prediction: {str(e)}")
             return {'error': str(e)}
     
-    def cluster_data(self, sheet_name: str, feature_columns: List[str], 
+    def _prepare_features(self, df: pd.DataFrame, feature_columns: List[str]) -> pd.DataFrame:
+        missing = [col for col in feature_columns if col not in df.columns]
+        if missing:
+            raise ValueError(f'Feature columns not found: {missing}')
+
+        features = df[feature_columns].copy()
+        for col in features.select_dtypes(include=['object']).columns:
+            features[col] = LabelEncoder().fit_transform(features[col].astype(str))
+        features = features.apply(pd.to_numeric, errors='coerce')
+        features = features.fillna(features.mean(numeric_only=True))
+        return features
+
+    def cluster_data(self, df: pd.DataFrame, feature_columns: List[str],
                     n_clusters: int = 3, algorithm: str = 'kmeans') -> Dict[str, Any]:
-        """
-        Perform clustering analysis on the data
-        """
         if not self.ml_available:
             return {'error': 'Machine learning not available. Please install scikit-learn.'}
-        
+
         try:
-            # Placeholder clustering results
+            from sklearn.metrics import silhouette_score
+
+            features = self._prepare_features(df, feature_columns)
+            scaler = StandardScaler()
+            scaled = scaler.fit_transform(features)
+
+            n_clusters = min(n_clusters, len(df))
+            if n_clusters < 2:
+                return {'error': 'Need at least 2 rows to cluster'}
+
+            if algorithm == 'dbscan':
+                model = DBSCAN()
+                labels = model.fit_predict(scaled)
+            elif algorithm == 'hierarchical':
+                model = AgglomerativeClustering(n_clusters=n_clusters)
+                labels = model.fit_predict(scaled)
+            else:
+                model = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+                labels = model.fit_predict(scaled)
+
+            unique_labels = set(labels)
+            silhouette = (
+                float(silhouette_score(scaled, labels))
+                if len(unique_labels) > 1 and -1 not in unique_labels
+                else None
+            )
+
+            cluster_summary = {}
+            for label in sorted(unique_labels):
+                mask = labels == label
+                cluster_summary[f'cluster_{label}'] = {
+                    'size': int(mask.sum()),
+                    'avg_values': features[mask].mean(numeric_only=True).to_dict(),
+                }
+
             return {
                 'algorithm': algorithm,
                 'n_clusters': n_clusters,
                 'feature_columns': feature_columns,
-                'cluster_labels': [],
-                'cluster_centers': [],
-                'silhouette_score': 0.65,
-                'cluster_summary': {
-                    'cluster_0': {'size': 150, 'avg_values': {}},
-                    'cluster_1': {'size': 120, 'avg_values': {}},
-                    'cluster_2': {'size': 80, 'avg_values': {}}
-                }
+                'cluster_labels': labels.tolist(),
+                'silhouette_score': silhouette,
+                'cluster_summary': cluster_summary,
             }
         except Exception as e:
             logger.error(f"Error in clustering: {str(e)}")
             return {'error': str(e)}
-    
-    def detect_anomalies(self, sheet_name: str, feature_columns: List[str], 
+
+    def detect_anomalies(self, df: pd.DataFrame, feature_columns: List[str],
                         method: str = 'isolation_forest') -> Dict[str, Any]:
-        """
-        Detect anomalies in the data
-        """
         if not self.ml_available:
             return {'error': 'Machine learning not available. Please install scikit-learn.'}
-        
+
         try:
-            # Placeholder anomaly detection results
+            features = self._prepare_features(df, feature_columns)
+            scaler = StandardScaler()
+            scaled = scaler.fit_transform(features)
+
+            if method == 'elliptic':
+                detector = EllipticEnvelope(contamination=0.05, random_state=42)
+            else:
+                detector = IsolationForest(contamination=0.05, random_state=42)
+
+            predictions = detector.fit_predict(scaled)
+            anomaly_mask = predictions == -1
+            scores = detector.decision_function(scaled) if hasattr(detector, 'decision_function') else predictions.astype(float)
+            indices = df.index[anomaly_mask].tolist()
+
             return {
                 'method': method,
                 'feature_columns': feature_columns,
-                'anomaly_count': 15,
-                'anomaly_percentage': 4.2,
-                'anomaly_indices': [5, 23, 45, 67, 89, 112, 134, 156, 178, 201, 223, 245, 267, 289, 312],
-                'anomaly_scores': [0.95, 0.92, 0.89, 0.87, 0.85, 0.83, 0.81, 0.79, 0.77, 0.75, 0.73, 0.71, 0.69, 0.67, 0.65]
+                'anomaly_count': int(anomaly_mask.sum()),
+                'anomaly_percentage': round((anomaly_mask.sum() / len(df)) * 100, 2),
+                'anomaly_indices': indices,
+                'anomaly_scores': [float(scores[i]) for i in range(len(scores)) if anomaly_mask[i]],
             }
         except Exception as e:
             logger.error(f"Error in anomaly detection: {str(e)}")
             return {'error': str(e)}
-    
-    def feature_importance_analysis(self, sheet_name: str, target_column: str, 
-                                   feature_columns: List[str]) -> Dict[str, Any]:
-        """
-        Analyze feature importance for prediction
-        """
-        if not self.ml_available:
-            return {'error': 'Machine learning not available. Please install scikit-learn.'}
-        
+
+    def correlation_analysis(self, df: pd.DataFrame, columns: List[str]) -> Dict[str, Any]:
         try:
-            # Placeholder feature importance results
-            importance_scores = {}
-            for i, col in enumerate(feature_columns):
-                importance_scores[col] = 0.9 - (i * 0.1)
-            
-            return {
-                'target_column': target_column,
-                'feature_columns': feature_columns,
-                'importance_scores': importance_scores,
-                'top_features': feature_columns[:3],
-                'recommendations': [
-                    f"Feature '{feature_columns[0]}' is the most important for prediction",
-                    f"Consider removing '{feature_columns[-1]}' as it has low importance",
-                    "Feature engineering might improve model performance"
-                ]
-            }
-        except Exception as e:
-            logger.error(f"Error in feature importance analysis: {str(e)}")
-            return {'error': str(e)}
-    
-    def correlation_analysis(self, sheet_name: str, columns: List[str]) -> Dict[str, Any]:
-        """
-        Perform correlation analysis between columns
-        """
-        try:
-            # Placeholder correlation results
-            correlations = {}
+            missing = [col for col in columns if col not in df.columns]
+            if missing:
+                return {'error': f'Columns not found: {missing}'}
+
+            numeric = df[columns].apply(pd.to_numeric, errors='coerce')
+            corr = numeric.corr()
+            matrix = corr.fillna(0).to_dict()
+
+            strong = []
             for i, col1 in enumerate(columns):
-                correlations[col1] = {}
-                for j, col2 in enumerate(columns):
-                    if i == j:
-                        correlations[col1][col2] = 1.0
-                    else:
-                        correlations[col1][col2] = 0.8 - abs(i - j) * 0.1
-            
+                for col2 in columns[i + 1:]:
+                    value = corr.loc[col1, col2]
+                    if pd.notna(value) and abs(value) >= 0.7:
+                        strong.append({
+                            'column1': col1,
+                            'column2': col2,
+                            'correlation': round(float(value), 4),
+                        })
+
+            recommendations = []
+            if strong:
+                pair = strong[0]
+                recommendations.append(
+                    f"Strong correlation ({pair['correlation']}) between '{pair['column1']}' and '{pair['column2']}'"
+                )
+            else:
+                recommendations.append('No very strong correlations (|r| >= 0.7) detected')
+
             return {
                 'columns': columns,
-                'correlation_matrix': correlations,
-                'strong_correlations': [
-                    {'column1': columns[0], 'column2': columns[1], 'correlation': 0.85},
-                    {'column1': columns[1], 'column2': columns[2], 'correlation': 0.78}
-                ],
-                'recommendations': [
-                    f"Strong positive correlation between '{columns[0]}' and '{columns[1]}'",
-                    f"Consider removing one of the highly correlated features"
-                ]
+                'correlation_matrix': matrix,
+                'strong_correlations': strong,
+                'recommendations': recommendations,
             }
         except Exception as e:
             logger.error(f"Error in correlation analysis: {str(e)}")
@@ -491,11 +517,9 @@ class MLProcessor:
             # Default to random forest
             return RandomForestClassifier() if is_classification else RandomForestRegressor()
     
-    def _generate_ai_insights(self, df: pd.DataFrame, target_column: str, feature_columns: List[str], 
+    def _generate_model_insights(self, df: pd.DataFrame, target_column: str, feature_columns: List[str],
                              metrics: Dict, feature_importance: Dict, is_classification: bool) -> List[str]:
-        """
-        Generate AI-powered insights about the model and data
-        """
+        """Generate rule-based insights about the model and data."""
         insights = []
         
         # Model performance insights
@@ -620,77 +644,57 @@ class MLProcessor:
 
 if __name__ == "__main__":
     import sys
-    
+    from excel_processor import _processor_for_session
+
     if len(sys.argv) < 2:
         print("Usage: python ml_processor.py <command> [args...]")
         sys.exit(1)
-    
+
     command = sys.argv[1]
     processor = MLProcessor()
-    
+
     try:
         if command == "predict":
-            if len(sys.argv) < 6:
-                print("Usage: python ml_processor.py predict <sheet_name> <target_column> <feature_columns_json> <model_type>")
-                sys.exit(1)
-            
-            sheet_name = sys.argv[2]
-            target_column = sys.argv[3]
-            feature_columns = json.loads(sys.argv[4])
-            model_type = sys.argv[5]
-            
-            result = processor.predict_values(sheet_name, target_column, feature_columns, model_type)
-            print(json.dumps(result, indent=2))
-            
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
+            target_column, feature_columns, model_type = sys.argv[4], json.loads(sys.argv[5]), sys.argv[6]
+            df = _processor_for_session(session_id).dataframes[sheet_name]
+            result = processor.predict_values(df, target_column, feature_columns, model_type)
+            print(json.dumps(result, default=str))
+
         elif command == "cluster":
-            if len(sys.argv) < 5:
-                print("Usage: python ml_processor.py cluster <sheet_name> <feature_columns_json> <n_clusters>")
-                sys.exit(1)
-            
-            sheet_name = sys.argv[2]
-            feature_columns = json.loads(sys.argv[3])
-            n_clusters = int(sys.argv[4])
-            
-            result = processor.cluster_data(sheet_name, feature_columns, n_clusters)
-            print(json.dumps(result, indent=2))
-            
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
+            feature_columns = json.loads(sys.argv[4])
+            n_clusters = int(sys.argv[5])
+            algorithm = sys.argv[6] if len(sys.argv) > 6 else 'kmeans'
+            df = _processor_for_session(session_id).dataframes[sheet_name]
+            result = processor.cluster_data(df, feature_columns, n_clusters, algorithm)
+            print(json.dumps(result, default=str))
+
         elif command == "anomalies":
-            if len(sys.argv) < 4:
-                print("Usage: python ml_processor.py anomalies <sheet_name> <feature_columns_json>")
-                sys.exit(1)
-            
-            sheet_name = sys.argv[2]
-            feature_columns = json.loads(sys.argv[3])
-            
-            result = processor.detect_anomalies(sheet_name, feature_columns)
-            print(json.dumps(result, indent=2))
-            
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
+            feature_columns = json.loads(sys.argv[4])
+            method = sys.argv[5] if len(sys.argv) > 5 else 'isolation_forest'
+            df = _processor_for_session(session_id).dataframes[sheet_name]
+            result = processor.detect_anomalies(df, feature_columns, method)
+            print(json.dumps(result, default=str))
+
         elif command == "correlation":
-            if len(sys.argv) < 4:
-                print("Usage: python ml_processor.py correlation <sheet_name> <columns_json>")
-                sys.exit(1)
-            
-            sheet_name = sys.argv[2]
-            columns = json.loads(sys.argv[3])
-            
-            result = processor.correlation_analysis(sheet_name, columns)
-            print(json.dumps(result, indent=2))
-            
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
+            columns = json.loads(sys.argv[4])
+            df = _processor_for_session(session_id).dataframes[sheet_name]
+            result = processor.correlation_analysis(df, columns)
+            print(json.dumps(result, default=str))
+
         elif command == "recommendations":
-            if len(sys.argv) < 4:
-                print("Usage: python ml_processor.py recommendations <sheet_name> <data_summary_json>")
-                sys.exit(1)
-            
-            sheet_name = sys.argv[2]
-            data_summary = json.loads(sys.argv[3])
-            
+            session_id, sheet_name = sys.argv[2], sys.argv[3]
+            data_summary = json.loads(sys.argv[4])
             result = processor.get_ml_recommendations(sheet_name, data_summary)
-            print(json.dumps(result, indent=2))
-            
+            print(json.dumps(result, default=str))
+
         else:
-            print(f"Unknown command: {command}")
+            print(f"Unknown command: {command}", file=sys.stderr)
             sys.exit(1)
-            
+
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)

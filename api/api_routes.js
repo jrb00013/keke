@@ -1,10 +1,32 @@
 const express = require('express');
 const multer = require('multer');
+const crypto = require('crypto');
 const { body, param, query, validationResult } = require('express-validator');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const router = express.Router();
+
+const SESSIONS_DIR = path.join(__dirname, '..', 'data', 'sessions');
+const AI_ENABLED = process.env.AI_ENABLED === 'true';
+
+if (!fsSync.existsSync(SESSIONS_DIR)) {
+    fsSync.mkdirSync(SESSIONS_DIR, { recursive: true });
+}
+
+router.use('/ai', (req, res, next) => {
+    if (!AI_ENABLED) {
+        return res.status(503).json({
+            success: false,
+            error: {
+                message: 'AI features are disabled. Set AI_ENABLED=true to enable.',
+                status: 503
+            }
+        });
+    }
+    next();
+});
 
 // Configure multer for file uploads
 const upload = multer({
@@ -20,10 +42,10 @@ const upload = multer({
             'application/json' // .json
         ];
         
-        if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls|csv|json)$/)) {
+        if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(xlsx|xls|csv|json|parquet)$/i)) {
             cb(null, true);
         } else {
-            cb(new Error('Invalid file type. Only Excel, CSV, and JSON files are allowed.'), false);
+            cb(new Error('Invalid file type. Only Excel, CSV, JSON, and Parquet files are allowed.'), false);
         }
     }
 });
@@ -59,14 +81,19 @@ router.post('/excel/upload',
 
             const filePath = req.file.path;
             const originalName = req.file.originalname;
-            
-            // Process file with Python
-            const result = await processExcelFile(filePath, originalName);
-            // Clean up the uploaded file 
-            await fs.unlink(filePath);
-            // Result of the file processing
+            const sessionId = crypto.randomUUID();
+            const sessionDir = path.join(SESSIONS_DIR, sessionId);
+            await fs.mkdir(sessionDir, { recursive: true });
+
+            const ext = path.extname(originalName) || '.dat';
+            const storedPath = path.join(sessionDir, `upload${ext}`);
+            await fs.rename(filePath, storedPath);
+
+            const result = await processCreateSession(sessionId, storedPath, originalName);
+
             res.json({
                 success: true,
+                session_id: sessionId,
                 file_info: result,
                 timestamp: new Date().toISOString()
             });
@@ -127,6 +154,28 @@ router.post('/excel/:sessionId/clean/:sheetName',
                 timestamp: new Date().toISOString()
             });
             
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// Chart preview data for the web UI (Chart.js)
+router.post('/excel/:sessionId/chart-preview/:sheetName',
+    param('sessionId').isLength({ min: 1 }).withMessage('Session ID is required'),
+    param('sheetName').isLength({ min: 1 }).withMessage('Sheet name is required'),
+    body('chart_config').isObject().withMessage('Chart config must be an object'),
+    validateRequest,
+    async (req, res, next) => {
+        try {
+            const { sessionId, sheetName } = req.params;
+            const { chart_config } = req.body;
+            const preview = await getChartPreview(sessionId, sheetName, chart_config);
+            res.json({
+                success: true,
+                chart: preview,
+                timestamp: new Date().toISOString()
+            });
         } catch (error) {
             next(error);
         }
@@ -902,12 +951,14 @@ router.post('/excel/batch',
 );
 
 // Helper functions to interact with Python Excel processor
-async function processExcelFile(filePath, originalName) {
+async function processCreateSession(sessionId, filePath, originalName) {
     return new Promise((resolve, reject) => {
         const python = spawn('python3', [
             path.join(__dirname, 'excel_processor.py'),
-            'load_file',
-            filePath
+            'create_session',
+            sessionId,
+            filePath,
+            originalName
         ]);
         
         let output = '';
@@ -926,6 +977,41 @@ async function processExcelFile(filePath, originalName) {
                 try {
                     const result = JSON.parse(output);
                     resolve(result);
+                } catch (parseError) {
+                    reject(new Error(`Failed to parse Python output: ${parseError.message}`));
+                }
+            } else {
+                reject(new Error(`Python process failed: ${error}`));
+            }
+        });
+    });
+}
+
+async function getChartPreview(sessionId, sheetName, chartConfig) {
+    return new Promise((resolve, reject) => {
+        const python = spawn('python3', [
+            path.join(__dirname, 'excel_processor.py'),
+            'chart_preview',
+            sessionId,
+            sheetName,
+            JSON.stringify(chartConfig)
+        ]);
+
+        let output = '';
+        let error = '';
+
+        python.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+
+        python.stderr.on('data', (data) => {
+            error += data.toString();
+        });
+
+        python.on('close', (code) => {
+            if (code === 0) {
+                try {
+                    resolve(JSON.parse(output));
                 } catch (parseError) {
                     reject(new Error(`Failed to parse Python output: ${parseError.message}`));
                 }
@@ -1288,6 +1374,7 @@ async function predictValues(sessionId, sheetName, targetColumn, featureColumns,
         const python = spawn('python3', [
             path.join(__dirname, 'ml_processor.py'),
             'predict',
+            sessionId,
             sheetName,
             targetColumn,
             JSON.stringify(featureColumns),
@@ -1325,9 +1412,11 @@ async function clusterData(sessionId, sheetName, featureColumns, nClusters, algo
         const python = spawn('python3', [
             path.join(__dirname, 'ml_processor.py'),
             'cluster',
+            sessionId,
             sheetName,
             JSON.stringify(featureColumns),
-            nClusters.toString()
+            nClusters.toString(),
+            algorithm
         ]);
         
         let output = '';
@@ -1361,8 +1450,10 @@ async function detectAnomalies(sessionId, sheetName, featureColumns, method) {
         const python = spawn('python3', [
             path.join(__dirname, 'ml_processor.py'),
             'anomalies',
+            sessionId,
             sheetName,
-            JSON.stringify(featureColumns)
+            JSON.stringify(featureColumns),
+            method
         ]);
         
         let output = '';
@@ -1396,6 +1487,7 @@ async function analyzeCorrelations(sessionId, sheetName, columns) {
         const python = spawn('python3', [
             path.join(__dirname, 'ml_processor.py'),
             'correlation',
+            sessionId,
             sheetName,
             JSON.stringify(columns)
         ]);
@@ -1433,6 +1525,7 @@ async function getMLRecommendations(sessionId, sheetName) {
             const python = spawn('python3', [
                 path.join(__dirname, 'ml_processor.py'),
                 'recommendations',
+                sessionId,
                 sheetName,
                 JSON.stringify(summary)
             ]);
