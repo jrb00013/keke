@@ -58,11 +58,25 @@ See `env.example`. Important variables:
 | `AI_ENABLED` | false | LLM routes (503 when false) |
 | `KEKE_SESSION_DIR` | `data/sessions` | Session storage path |
 
+## FreeRTOS API
+
+```bash
+curl http://localhost:3000/api/rtos/status
+curl -X POST http://localhost:3000/api/rtos/watchdog/feed
+curl -X POST http://localhost:3000/api/rtos/excel/enqueue \
+  -H 'Content-Type: application/json' \
+  -d '{"file_path":"/path/to/file.xlsx","operations":[{"type":"remove_duplicates"}]}'
+curl http://localhost:3000/api/rtos/excel/results
+```
+
+Primitives: `excel_jobs` / `excel_results` queues, `excel_processing` semaphore (3), `house_lock` mutex, `system_watchdog` (30s, feed via API or during job processing).
+
 ## Tests
 
 ```bash
 source .venv/bin/activate
 pytest tests/test_session_store.py tests/test_api_routes.py tests/test_excel_processor.py -q
+pytest tests/test_freertos_integration.py -q
 ```
 
 ## License
