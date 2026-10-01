@@ -1669,7 +1669,7 @@ async function getCloudStorageStatus() {
     });
 }
 
-async function uploadToCloud(filePath, provider, cloudPath, metadata) {
+async function uploadToCloud(filePath, provider, cloudPath, _metadata) {
     return new Promise((resolve, reject) => {
         const python = spawnPython([
             path.join(__dirname, 'cloud_storage.py'),
@@ -1990,7 +1990,7 @@ async function getUserCollaborationSessions(userId) {
 }
 
 // AI Assistant helper functions
-async function processAIQuery(sessionId, sheetName, query, context) {
+async function processAIQuery(sessionId, sheetName, query, _context) {
     return new Promise((resolve, reject) => {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
