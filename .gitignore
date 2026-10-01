@@ -6,8 +6,12 @@ venv/
 .env
 *.log
 uploads/
+api/uploads/
+api/temp/
 data/sessions/*
 !data/sessions/.gitkeep
+data/*.sock
+data/*.sock.log
 .pytest_cache/
 .coverage
 htmlcov/

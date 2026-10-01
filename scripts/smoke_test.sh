@@ -143,7 +143,24 @@ check "POST rtos/watchdog"     200 -X POST -H "$J" -d '{"name":"system_watchdog"
 check "POST rtos/enqueue"      200 -X POST -H "$J" \
     -d "{\"file_path\":\"$TMP/fixture.xlsx\",\"operations\":[{\"type\":\"remove_duplicates\"}]}" \
     "$BASE/api/rtos/excel/enqueue"
-check "GET  rtos/results"      200 "$BASE/api/rtos/excel/results"
+
+# Regression guard: the kernel state must survive across HTTP requests. Before the
+# persistent-daemon fix, this always returned [] because each request spawned a
+# fresh Python interpreter with an empty queue.
+RTOS_OK=0
+for _ in $(seq 1 20); do
+    RES="$(curl -s -m 30 "$BASE/api/rtos/excel/results")"
+    if grep -q 'job_id' <<<"$RES"; then RTOS_OK=1; break; fi
+    sleep 0.5
+done
+if [[ "$RTOS_OK" == "1" ]]; then
+    green "PASS  GET  rtos/results (job persists across requests)"
+    PASS=$((PASS + 1))
+else
+    red "FAIL  GET  rtos/results (queue did not survive across requests)"
+    printf '      %s\n' "$(head -c 300 <<<"$RES")"
+    FAIL=$((FAIL + 1))
+fi
 
 # --- Cloud (credentials optional) -------------------------------------------
 ALLOW_BODY='error|success|available|configured' check "GET  cloud/status" 200 "$BASE/api/cloud/status"
