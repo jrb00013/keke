@@ -14,9 +14,6 @@ RUN npm ci
 # Copy source code
 COPY api/ ./api/
 
-# Build application if needed
-RUN npm run build || true
-
 # Stage 2: Build Python application with AI dependencies
 FROM python:3.11-slim AS python-builder
 
@@ -89,6 +86,9 @@ COPY --from=node-builder /app/node_modules ./node_modules
 
 # Copy application code
 COPY api/ ./api/
+# legacy/ holds the FreeRTOS kernel that api/rtos_bridge.py imports. Without
+# this, every /api/rtos/* route fails with ModuleNotFoundError in the image.
+COPY legacy/ ./legacy/
 COPY package*.json ./
 COPY run.py ./
 COPY env.example ./

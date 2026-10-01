@@ -53,7 +53,10 @@ class KekeRunner:
             'port': int(os.getenv('PORT', 3000)),
             'host': os.getenv('HOST', 'localhost'),
             'debug': os.getenv('DEBUG', 'false').lower() == 'true',
-            'ai_enabled': os.getenv('AI_ENABLED', 'true').lower() == 'true',
+            # Off by default: matches README, env.example and api_routes.js, all
+            # of which require an explicit AI_ENABLED=true. Defaulting to true here
+            # silently enabled AI in the container against the documented behaviour.
+            'ai_enabled': os.getenv('AI_ENABLED', 'false').lower() == 'true',
             'openai_api_key': os.getenv('OPENAI_API_KEY'),
             'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY'),
             'database_url': os.getenv('DATABASE_URL', 'sqlite:///keke.db'),

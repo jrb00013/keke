@@ -658,9 +658,35 @@ class Assistant:
 
 if __name__ == "__main__":
     import sys
-    
+
+    def _json_default(obj: Any) -> Any:
+        """Coerce pandas/numpy scalars and containers into JSON-safe values.
+
+        Analysis results carry dtype objects (e.g. Int64DType) and numpy
+        scalars, which the default encoder cannot serialize.
+        """
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (pd.Timestamp, datetime)):
+            return obj.isoformat()
+        if isinstance(obj, pd.DataFrame):
+            return obj.to_dict(orient='records')
+        if isinstance(obj, pd.Series):
+            return obj.tolist()
+        if isinstance(obj, pd.api.extensions.ExtensionDtype):
+            return str(obj)
+        if obj is pd.NaT or obj is pd.NA:
+            return None
+        return str(obj)
+
     if len(sys.argv) < 3:
-        print("Usage: python ai_assistant.py <query> <data_json>")
+        print("Usage: python assistant.py <query> <data_json>")
         sys.exit(1)
     
     query = sys.argv[1]
@@ -678,7 +704,7 @@ if __name__ == "__main__":
         result = assistant.process_natural_language_query(query, df)
         
         # Output result
-        print(json.dumps(result, indent=2))
+        print(json.dumps(result, indent=2, default=_json_default))
         
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)

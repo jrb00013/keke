@@ -1,13 +1,19 @@
 import json
 import logging
 import asyncio
-import websockets
 from typing import Dict, List, Optional, Any, Set
 from datetime import datetime
 import uuid
 from collections import defaultdict
 import threading
 import time
+
+try:
+    import websockets
+
+    WEBSOCKETS_AVAILABLE = True
+except ImportError:  # optional: realtime transport degrades to polling
+    WEBSOCKETS_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

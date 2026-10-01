@@ -3,10 +3,20 @@ import json
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-import boto3
-from botocore.exceptions import ClientError
-import requests
 from pathlib import Path
+import requests
+
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+
+    BOTO3_AVAILABLE = True
+except ImportError:  # boto3 is optional: cloud routes degrade to "not configured"
+    BOTO3_AVAILABLE = False
+
+    class ClientError(Exception):
+        """Placeholder so the `except ClientError` clauses stay valid."""
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +45,9 @@ class CloudStorageManager:
     
     def _initialize_clients(self):
         """Initialize cloud storage clients"""
+        if not BOTO3_AVAILABLE:
+            logger.info("boto3 not installed; S3 integration disabled")
+            return
         try:
             # Initialize S3 client
             if self.aws_access_key and self.aws_secret_key:

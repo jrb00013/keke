@@ -9,10 +9,14 @@ const fsSync = require('fs');
 const router = express.Router();
 
 const SESSIONS_DIR = path.join(__dirname, '..', 'data', 'sessions');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const TEMP_DIR = path.join(__dirname, 'temp');
 const AI_ENABLED = process.env.AI_ENABLED === 'true';
 
-if (!fsSync.existsSync(SESSIONS_DIR)) {
-    fsSync.mkdirSync(SESSIONS_DIR, { recursive: true });
+for (const dir of [SESSIONS_DIR, UPLOADS_DIR, TEMP_DIR]) {
+    if (!fsSync.existsSync(dir)) {
+        fsSync.mkdirSync(dir, { recursive: true });
+    }
 }
 
 router.use('/ai', (req, res, next) => {
@@ -30,7 +34,9 @@ router.use('/ai', (req, res, next) => {
 
 // Configure multer for file uploads
 const upload = multer({
-    dest: 'uploads/',
+    // Absolute path: a cwd-relative dest breaks when the process is started
+    // from a different working directory (Docker, systemd, cron).
+    dest: UPLOADS_DIR,
     limits: {
         fileSize: 50 * 1024 * 1024 // 50MB limit or we can do more if needed I'm not sure
     },
@@ -976,9 +982,10 @@ router.post('/excel/batch',
                 req.files.map(file => processExcelFile(file.path, file.originalname))
             );
             
-            // Clean up uploaded files
+            // Clean up any temp files that were not moved into a session dir.
+            // processExcelFile renames each file on success, so ENOENT is expected.
             await Promise.all(
-                req.files.map(file => fs.unlink(file.path))
+                req.files.map(file => fs.unlink(file.path).catch(() => {}))
             );
             
             const processedResults = results.map((result, index) => ({
@@ -1007,6 +1014,21 @@ router.post('/excel/batch',
 );
 
 // Helper functions to interact with Python Excel processor
+
+// Create a session for an already-uploaded file. Mirrors the single-file upload
+// flow so that /excel/batch and /excel/upload behave identically.
+async function processExcelFile(storedPath, originalName) {
+    const sessionId = crypto.randomUUID();
+    const sessionDir = path.join(SESSIONS_DIR, sessionId);
+    await fs.mkdir(sessionDir, { recursive: true });
+
+    const ext = path.extname(originalName) || '.dat';
+    const finalPath = path.join(sessionDir, `upload${ext}`);
+    await fs.rename(storedPath, finalPath);
+
+    return processCreateSession(sessionId, finalPath, originalName);
+}
+
 async function processCreateSession(sessionId, filePath, originalName) {
     return new Promise((resolve, reject) => {
         const python = spawn('python3', [
@@ -1973,7 +1995,7 @@ async function processAIQuery(sessionId, sheetName, query, context) {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
             const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+                path.join(__dirname, 'assistant.py'),
                 query,
                 JSON.stringify(previewData)
             ]);
@@ -2010,7 +2032,7 @@ async function getAIInsights(sessionId, sheetName) {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
             const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+                path.join(__dirname, 'assistant.py'),
                 'Generate insights about this data',
                 JSON.stringify(previewData)
             ]);
@@ -2047,7 +2069,7 @@ async function getAICleaningSuggestions(sessionId, sheetName) {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
             const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+                path.join(__dirname, 'assistant.py'),
                 'What data cleaning suggestions do you have for this dataset?',
                 JSON.stringify(previewData)
             ]);
@@ -2084,7 +2106,7 @@ async function getAIVisualizationSuggestions(sessionId, sheetName) {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
             const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+                path.join(__dirname, 'assistant.py'),
                 'What visualizations would be best for this data?',
                 JSON.stringify(previewData)
             ]);
