@@ -68,7 +68,16 @@ jobs:
     - name: Run Python tests
       run: |
         pytest tests/ --cov=api --cov-report=xml
-    
+
+    - name: Validate Kubernetes manifests
+      run: python scripts/validate_k8s.py
+
+    - name: Validate docker-compose
+      env:
+        # Validate the optional profiles too, not just the default stack.
+        COMPOSE_PROFILES: databases,monitoring,proxy,logging
+      run: docker compose config -q
+
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
       with:
