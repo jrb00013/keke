@@ -1,0 +1,12 @@
+# Grafana datasource provisioning. Referenced by docker-compose.yml; the
+# directory previously did not exist so the bind mount was empty and Grafana
+# came up with no datasource.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
