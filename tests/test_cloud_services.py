@@ -6,6 +6,16 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'api'))
 
+# cloud_services.py is a multi-cloud module whose SDKs (azure, google-cloud,
+# redis, pymongo, sqlalchemy) are deliberately not shipped in requirements.txt.
+# Without this guard the whole pytest run aborts during collection with
+# ModuleNotFoundError instead of just skipping these tests.
+pytest.importorskip('azure.storage.blob')
+pytest.importorskip('google.cloud.storage')
+pytest.importorskip('redis')
+pytest.importorskip('pymongo')
+pytest.importorskip('sqlalchemy')
+
 from cloud_services import (
     CloudConfig, AWSCloudService, AzureCloudService, GCPCloudService,
     RedisCacheService, DatabaseService, CloudServiceManager, cloud_manager

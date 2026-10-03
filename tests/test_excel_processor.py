@@ -200,14 +200,23 @@ class TestExcelProcessor:
             
             os.unlink(tmp.name)
     
-    def test_insufficient_data_for_analysis(self, processor):
-        """Test analysis with insufficient data"""
-        # Create data with less than 50 rows
-        small_data = pd.DataFrame({'A': [1, 2, 3]})
-        processor.dataframes['TestSheet'] = small_data
-        
+    def test_insufficient_data_for_analysis(self):
+        """Analysis/prep training rejects datasets below the 50-row minimum"""
+        predictor = AdvancedStockPredictor()
+        # Well-formed but short (< 50 rows).
+        rows = [
+            {
+                'close_price': 100 + i,
+                'open_price': 99 + i,
+                'high_price': 101 + i,
+                'low_price': 98 + i,
+                'volume': 1000 + i,
+            }
+            for i in range(30)
+        ]
+
         with pytest.raises(ValueError, match="Insufficient data for training"):
-            processor.prepare_training_data([{'A': 1}, {'A': 2}, {'A': 3}])
+            predictor.prepare_training_data(rows)
 
 class TestAdvancedStockPredictor:
     """Test suite for AdvancedStockPredictor class"""
@@ -256,11 +265,15 @@ class TestAdvancedStockPredictor:
     
     def test_calculate_rsi(self, predictor):
         """Test RSI calculation"""
-        prices = pd.Series([100, 102, 101, 103, 105, 104, 106, 108, 107, 109])
+        # The default RSI window is 14, so a series shorter than that is entirely
+        # NaN by construction. Use a longer series and assert the tail is valid.
+        prices = pd.Series(range(100, 130))
         rsi = predictor._calculate_rsi(prices)
         
         assert len(rsi) == len(prices)
-        assert not rsi.isna().all()  # Should have some valid RSI values
+        assert rsi.isna().any()      # warm-up period has no value yet
+        assert not rsi.isna().all()  # later points have real values
+        assert rsi.dropna().between(0, 100).all()
     
     def test_train_model(self, predictor, sample_stock_data):
         """Test model training"""
