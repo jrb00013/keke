@@ -2,17 +2,21 @@ const express = require('express');
 const multer = require('multer');
 const crypto = require('crypto');
 const { body, param, query, validationResult } = require('express-validator');
-const { spawn } = require('child_process');
+const { spawnPython } = require('./python_runner');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const router = express.Router();
 
 const SESSIONS_DIR = path.join(__dirname, '..', 'data', 'sessions');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const TEMP_DIR = path.join(__dirname, 'temp');
 const AI_ENABLED = process.env.AI_ENABLED === 'true';
 
-if (!fsSync.existsSync(SESSIONS_DIR)) {
-    fsSync.mkdirSync(SESSIONS_DIR, { recursive: true });
+for (const dir of [SESSIONS_DIR, UPLOADS_DIR, TEMP_DIR]) {
+    if (!fsSync.existsSync(dir)) {
+        fsSync.mkdirSync(dir, { recursive: true });
+    }
 }
 
 router.use('/ai', (req, res, next) => {
@@ -30,7 +34,9 @@ router.use('/ai', (req, res, next) => {
 
 // Configure multer for file uploads
 const upload = multer({
-    dest: 'uploads/',
+    // Absolute path: a cwd-relative dest breaks when the process is started
+    // from a different working directory (Docker, systemd, cron).
+    dest: UPLOADS_DIR,
     limits: {
         fileSize: 50 * 1024 * 1024 // 50MB limit or we can do more if needed I'm not sure
     },
@@ -976,9 +982,10 @@ router.post('/excel/batch',
                 req.files.map(file => processExcelFile(file.path, file.originalname))
             );
             
-            // Clean up uploaded files
+            // Clean up any temp files that were not moved into a session dir.
+            // processExcelFile renames each file on success, so ENOENT is expected.
             await Promise.all(
-                req.files.map(file => fs.unlink(file.path))
+                req.files.map(file => fs.unlink(file.path).catch(() => {}))
             );
             
             const processedResults = results.map((result, index) => ({
@@ -1007,9 +1014,24 @@ router.post('/excel/batch',
 );
 
 // Helper functions to interact with Python Excel processor
+
+// Create a session for an already-uploaded file. Mirrors the single-file upload
+// flow so that /excel/batch and /excel/upload behave identically.
+async function processExcelFile(storedPath, originalName) {
+    const sessionId = crypto.randomUUID();
+    const sessionDir = path.join(SESSIONS_DIR, sessionId);
+    await fs.mkdir(sessionDir, { recursive: true });
+
+    const ext = path.extname(originalName) || '.dat';
+    const finalPath = path.join(sessionDir, `upload${ext}`);
+    await fs.rename(storedPath, finalPath);
+
+    return processCreateSession(sessionId, finalPath, originalName);
+}
+
 async function processCreateSession(sessionId, filePath, originalName) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'create_session',
             sessionId,
@@ -1045,7 +1067,7 @@ async function processCreateSession(sessionId, filePath, originalName) {
 
 async function getChartPreview(sessionId, sheetName, chartConfig) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'chart_preview',
             sessionId,
@@ -1080,7 +1102,7 @@ async function getChartPreview(sessionId, sheetName, chartConfig) {
 
 async function analyzeSheetData(sessionId, sheetName) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'analyze_data',
             sessionId,
@@ -1115,7 +1137,7 @@ async function analyzeSheetData(sessionId, sheetName) {
 
 async function cleanSheetData(sessionId, sheetName, operations) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'clean_data',
             sessionId,
@@ -1151,7 +1173,7 @@ async function cleanSheetData(sessionId, sheetName, operations) {
 
 async function createChart(sessionId, sheetName, chartConfig) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'create_chart',
             sessionId,
@@ -1182,7 +1204,7 @@ async function createChart(sessionId, sheetName, chartConfig) {
 
 async function exportSheetData(sessionId, sheetName, format) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'export_data',
             sessionId,
@@ -1213,7 +1235,7 @@ async function exportSheetData(sessionId, sheetName, format) {
 
 async function applyFormulas(sessionId, sheetName, formulas) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'apply_formulas',
             sessionId,
@@ -1249,7 +1271,7 @@ async function applyFormulas(sessionId, sheetName, formulas) {
 
 async function getDataSummary(sessionId) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'get_summary',
             sessionId
@@ -1283,7 +1305,7 @@ async function getDataSummary(sessionId) {
 
 async function getDataPreview(sessionId, sheetName, limit) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'get_preview',
             sessionId,
@@ -1319,7 +1341,7 @@ async function getDataPreview(sessionId, sheetName, limit) {
 
 async function getColumnInfo(sessionId, sheetName) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'get_columns',
             sessionId,
@@ -1354,7 +1376,7 @@ async function getColumnInfo(sessionId, sheetName) {
 
 async function validateSheetData(sessionId, sheetName, rules) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'validate_data',
             sessionId,
@@ -1390,7 +1412,7 @@ async function validateSheetData(sessionId, sheetName, rules) {
 
 async function transformSheetData(sessionId, sheetName, transformations) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'excel_processor.py'),
             'transform_data',
             sessionId,
@@ -1427,7 +1449,7 @@ async function transformSheetData(sessionId, sheetName, transformations) {
 // Machine Learning helper functions
 async function predictValues(sessionId, sheetName, targetColumn, featureColumns, modelType) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'ml_processor.py'),
             'predict',
             sessionId,
@@ -1465,7 +1487,7 @@ async function predictValues(sessionId, sheetName, targetColumn, featureColumns,
 
 async function clusterData(sessionId, sheetName, featureColumns, nClusters, algorithm) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'ml_processor.py'),
             'cluster',
             sessionId,
@@ -1503,7 +1525,7 @@ async function clusterData(sessionId, sheetName, featureColumns, nClusters, algo
 
 async function detectAnomalies(sessionId, sheetName, featureColumns, method) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'ml_processor.py'),
             'anomalies',
             sessionId,
@@ -1540,7 +1562,7 @@ async function detectAnomalies(sessionId, sheetName, featureColumns, method) {
 
 async function analyzeCorrelations(sessionId, sheetName, columns) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'ml_processor.py'),
             'correlation',
             sessionId,
@@ -1578,7 +1600,7 @@ async function getMLRecommendations(sessionId, sheetName) {
     return new Promise((resolve, reject) => {
         // First get data summary
         getDataSummary(sessionId).then(summary => {
-            const python = spawn('python3', [
+            const python = spawnPython([
                 path.join(__dirname, 'ml_processor.py'),
                 'recommendations',
                 sessionId,
@@ -1616,7 +1638,7 @@ async function getMLRecommendations(sessionId, sheetName) {
 // Cloud Storage helper functions
 async function getCloudStorageStatus() {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'cloud_storage.py'),
             'status'
         ]);
@@ -1649,7 +1671,7 @@ async function getCloudStorageStatus() {
 
 async function uploadToCloud(filePath, provider, cloudPath, metadata) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'cloud_storage.py'),
             'upload',
             filePath,
@@ -1687,7 +1709,7 @@ async function downloadFromCloud(provider, cloudPath) {
     return new Promise((resolve, reject) => {
         const tempPath = path.join(__dirname, 'temp', `download_${Date.now()}`);
         
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'cloud_storage.py'),
             'download',
             provider,
@@ -1723,7 +1745,7 @@ async function downloadFromCloud(provider, cloudPath) {
 
 async function listCloudFiles(provider, prefix) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'cloud_storage.py'),
             'list',
             provider,
@@ -1759,7 +1781,7 @@ async function listCloudFiles(provider, prefix) {
 // Collaboration helper functions
 async function createCollaborationSession(userId, sessionName, fileInfo) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'collaboration.py'),
             'create_session',
             userId,
@@ -1795,7 +1817,7 @@ async function createCollaborationSession(userId, sessionName, fileInfo) {
 
 async function joinCollaborationSession(userId, sessionId) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'collaboration.py'),
             'join_session',
             userId,
@@ -1830,7 +1852,7 @@ async function joinCollaborationSession(userId, sessionId) {
 
 async function leaveCollaborationSession(userId, sessionId) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'collaboration.py'),
             'leave_session',
             userId,
@@ -1865,7 +1887,7 @@ async function leaveCollaborationSession(userId, sessionId) {
 
 async function applyCollaborationChange(userId, sessionId, change) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'collaboration.py'),
             'apply_change',
             userId,
@@ -1901,7 +1923,7 @@ async function applyCollaborationChange(userId, sessionId, change) {
 
 async function getCollaborationSessionState(sessionId) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'collaboration.py'),
             'get_session_state',
             sessionId
@@ -1935,7 +1957,7 @@ async function getCollaborationSessionState(sessionId) {
 
 async function getUserCollaborationSessions(userId) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'collaboration.py'),
             'get_user_sessions',
             userId
@@ -1972,8 +1994,8 @@ async function processAIQuery(sessionId, sheetName, query, context) {
     return new Promise((resolve, reject) => {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
-            const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+            const python = spawnPython([
+                path.join(__dirname, 'assistant.py'),
                 query,
                 JSON.stringify(previewData)
             ]);
@@ -2009,8 +2031,8 @@ async function getAIInsights(sessionId, sheetName) {
     return new Promise((resolve, reject) => {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
-            const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+            const python = spawnPython([
+                path.join(__dirname, 'assistant.py'),
                 'Generate insights about this data',
                 JSON.stringify(previewData)
             ]);
@@ -2046,8 +2068,8 @@ async function getAICleaningSuggestions(sessionId, sheetName) {
     return new Promise((resolve, reject) => {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
-            const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+            const python = spawnPython([
+                path.join(__dirname, 'assistant.py'),
                 'What data cleaning suggestions do you have for this dataset?',
                 JSON.stringify(previewData)
             ]);
@@ -2083,8 +2105,8 @@ async function getAIVisualizationSuggestions(sessionId, sheetName) {
     return new Promise((resolve, reject) => {
         // First get the data preview
         getDataPreview(sessionId, sheetName, 1000).then(previewData => {
-            const python = spawn('python3', [
-                path.join(__dirname, 'ai_assistant.py'),
+            const python = spawnPython([
+                path.join(__dirname, 'assistant.py'),
                 'What visualizations would be best for this data?',
                 JSON.stringify(previewData)
             ]);
@@ -2118,7 +2140,7 @@ async function getAIVisualizationSuggestions(sessionId, sheetName) {
 
 async function runRtosBridge(command, ...args) {
     return new Promise((resolve, reject) => {
-        const python = spawn('python3', [
+        const python = spawnPython([
             path.join(__dirname, 'rtos_bridge.py'),
             command,
             ...args
