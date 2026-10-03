@@ -80,7 +80,9 @@ def feed_watchdog(name: str = "system_watchdog") -> bool:
     return get_kernel().feed_watchdog(name)
 
 
-def enqueue_excel_job(file_path: str, operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+def enqueue_excel_job(
+    file_path: str, operations: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     excel = get_excel_processor()
     ok = excel.enqueue(file_path, operations)
     return {"queued": ok, "file_path": file_path}
@@ -188,9 +190,7 @@ def serve_forever(socket_path: Optional[str] = None) -> None:
         except OSError:
             continue
         # One thread per connection so a slow request cannot block `status`.
-        threading.Thread(
-            target=_handle_connection, args=(conn,), daemon=True
-        ).start()
+        threading.Thread(target=_handle_connection, args=(conn,), daemon=True).start()
 
 
 # --------------------------------------------------------------------------- #
@@ -198,7 +198,9 @@ def serve_forever(socket_path: Optional[str] = None) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _try_request(request: Dict[str, Any], timeout: float = _CONNECT_TIMEOUT) -> Dict[str, Any]:
+def _try_request(
+    request: Dict[str, Any], timeout: float = _CONNECT_TIMEOUT
+) -> Dict[str, Any]:
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     client.settimeout(timeout)
     try:
@@ -263,7 +265,9 @@ def _ensure_daemon() -> None:
             last_error = exc
             time.sleep(0.15)
 
-    raise TimeoutError(f"RTOS daemon did not start within {_DAEMON_BOOT_TIMEOUT}s: {last_error}")
+    raise TimeoutError(
+        f"RTOS daemon did not start within {_DAEMON_BOOT_TIMEOUT}s: {last_error}"
+    )
 
 
 def request(command: str, **args: Any) -> Dict[str, Any]:
@@ -282,18 +286,29 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
     if command == "enqueue":
         if len(argv) < 3:
             raise ValueError("enqueue requires <file_path> <operations_json>")
-        return {"command": "enqueue", "args": {
-            "file_path": argv[1],
-            "operations": json.loads(argv[2]),
-        }}
+        return {
+            "command": "enqueue",
+            "args": {
+                "file_path": argv[1],
+                "operations": json.loads(argv[2]),
+            },
+        }
     if command == "feed_watchdog":
-        return {"command": "feed_watchdog", "args": {
-            "name": argv[1] if len(argv) > 1 else "system_watchdog",
-        }}
+        return {
+            "command": "feed_watchdog",
+            "args": {
+                "name": argv[1] if len(argv) > 1 else "system_watchdog",
+            },
+        }
     if command == "boot":
-        return {"command": "boot", "args": {
-            "start_scheduler": (argv[1].lower() != "false") if len(argv) > 1 else True,
-        }}
+        return {
+            "command": "boot",
+            "args": {
+                "start_scheduler": (
+                    (argv[1].lower() != "false") if len(argv) > 1 else True
+                ),
+            },
+        }
     return {"command": command, "args": {}}
 
 

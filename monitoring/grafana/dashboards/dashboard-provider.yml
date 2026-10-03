@@ -1,0 +1,13 @@
+# Grafana dashboard provider. Tells Grafana to load dashboard JSON files from
+# the same directory it is provisioned into.
+apiVersion: 1
+
+providers:
+  - name: Keke
+    orgId: 1
+    folder: Keke
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

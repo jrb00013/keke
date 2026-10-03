@@ -1,42 +1,56 @@
-version: '3.8'
+# Docker Compose for the Keke Excel Datasheet Tool.
+#
+# The app is self-contained (Node + an embedded Python interpreter); it has no
+# hard runtime dependency on the datastores or the observability stack, which
+# are wired to modules that are not part of the shipped image. They are
+# therefore opt-in, via profiles:
+#
+#   docker compose up                          # the application only
+#   docker compose --profile databases up      # + redis, mongodb, postgres
+#   docker compose --profile monitoring up     # + prometheus, grafana
+#   docker compose --profile proxy up          # + nginx
+#   docker compose --profile logging up        # + elk stack
+#
+# Every bind-mounted file below exists in the repository. Previously several
+# did not (mongo-init.js, nginx.conf, logstash.conf, grafana provisioning),
+# and Docker materialised each missing source as a directory, so the dependent
+# container could not start.
 
 services:
-  # Main Keke application
+  # Main Keke application (default profile)
   keke-app:
     build: .
+    image: keke-excel-tool:latest
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - REDIS_URL=redis://redis:6379
-      - MONGODB_URL=mongodb://mongodb:27017/keke
-      - POSTGRES_URL=postgresql://postgres:password@postgres:5432/keke
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
-    depends_on:
-      - redis
-      - mongodb
-      - postgres
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      AI_ENABLED: ${AI_ENABLED:-false}
+      REDIS_URL: redis://redis:6379
+      MONGODB_URL: mongodb://mongodb:27017/keke
+      POSTGRES_URL: postgresql://postgres:password@postgres:5432/keke
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
     volumes:
-      - ./uploads:/app/uploads
-      - ./logs:/app/logs
-      - ./data:/app/data
+      - keke-uploads:/app/uploads
+      - keke-data:/app/data
+      - keke-temp:/app/temp
     networks:
       - keke-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
-  # Redis for caching
+  # --- Opt-in datastores ----------------------------------------------------
   redis:
+    profiles: ["databases"]
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -52,15 +66,15 @@ services:
       timeout: 10s
       retries: 3
 
-  # MongoDB for document storage
   mongodb:
+    profiles: ["databases"]
     image: mongo:6
     ports:
       - "27017:27017"
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
-      - MONGO_INITDB_DATABASE=keke
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: keke
     volumes:
       - mongodb-data:/data/db
       - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
@@ -68,22 +82,23 @@ services:
       - keke-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # PostgreSQL for relational data
   postgres:
+    profiles: ["databases"]
     image: postgres:15-alpine
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_DB=keke
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      POSTGRES_DB: keke
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # PostgreSQL init; database.sql is PostgreSQL DDL.
       - ./database.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - keke-network
@@ -94,15 +109,15 @@ services:
       timeout: 10s
       retries: 3
 
-  # Nginx reverse proxy
+  # --- Opt-in reverse proxy -------------------------------------------------
+  # TLS terminates upstream; this listens on :80 only.
   nginx:
+    profiles: ["proxy"]
     image: nginx:alpine
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - keke-app
     networks:
@@ -114,31 +129,32 @@ services:
       timeout: 10s
       retries: 3
 
-  # Monitoring with Prometheus
+  # --- Opt-in observability -------------------------------------------------
   prometheus:
+    profiles: ["monitoring"]
     image: prom/prometheus:latest
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Mount the whole directory so prometheus.yml can load keke_rules.yml,
+      # which it references via rule_files.
+      - ./monitoring:/etc/prometheus:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
     networks:
       - keke-network
     restart: unless-stopped
 
-  # Grafana for visualization
   grafana:
+    profiles: ["monitoring"]
     image: grafana/grafana:latest
     ports:
       - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
@@ -149,13 +165,14 @@ services:
       - keke-network
     restart: unless-stopped
 
-  # Log aggregation with ELK stack
+  # --- Opt-in logging (ELK) -------------------------------------------------
   elasticsearch:
+    profiles: ["logging"]
     image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
     environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     ports:
@@ -165,6 +182,7 @@ services:
     restart: unless-stopped
 
   logstash:
+    profiles: ["logging"]
     image: docker.elastic.co/logstash/logstash:8.8.0
     volumes:
       - ./monitoring/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
@@ -175,11 +193,12 @@ services:
     restart: unless-stopped
 
   kibana:
+    profiles: ["logging"]
     image: docker.elastic.co/kibana/kibana:8.8.0
     ports:
       - "5601:5601"
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     depends_on:
       - elasticsearch
     networks:
@@ -187,6 +206,9 @@ services:
     restart: unless-stopped
 
 volumes:
+  keke-uploads:
+  keke-data:
+  keke-temp:
   redis-data:
   mongodb-data:
   postgres-data:

@@ -24,9 +24,13 @@ botocore>=1.29.0
 # Dev / test
 pytest>=7.0.0
 pytest-cov>=4.0.0
-black>=22.0.0
-flake8>=5.0.0
+# Pinned: black's formatting changes between releases, so an unpinned install
+# makes `black --check` flaky across environments.
+black==26.5.1
+flake8==7.3.0
 psutil>=5.9.0
+# Used by scripts/validate_k8s.py (manifest consistency checks in CI)
+pyyaml>=6.0.0
 
 # Optional ML extras (install manually if needed)
 # xgboost>=1.6.0
