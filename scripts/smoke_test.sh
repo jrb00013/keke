@@ -143,7 +143,24 @@ check "POST rtos/watchdog"     200 -X POST -H "$J" -d '{"name":"system_watchdog"
 check "POST rtos/enqueue"      200 -X POST -H "$J" \
     -d "{\"file_path\":\"$TMP/fixture.xlsx\",\"operations\":[{\"type\":\"remove_duplicates\"}]}" \
     "$BASE/api/rtos/excel/enqueue"
-check "GET  rtos/results"      200 "$BASE/api/rtos/excel/results"
+
+# Regression guard: the kernel state must survive across HTTP requests. Before the
+# persistent-daemon fix, this always returned [] because each request spawned a
+# fresh Python interpreter with an empty queue.
+RTOS_OK=0
+for _ in $(seq 1 20); do
+    RES="$(curl -s -m 30 "$BASE/api/rtos/excel/results")"
+    if grep -q 'job_id' <<<"$RES"; then RTOS_OK=1; break; fi
+    sleep 0.5
+done
+if [[ "$RTOS_OK" == "1" ]]; then
+    green "PASS  GET  rtos/results (job persists across requests)"
+    PASS=$((PASS + 1))
+else
+    red "FAIL  GET  rtos/results (queue did not survive across requests)"
+    printf '      %s\n' "$(head -c 300 <<<"$RES")"
+    FAIL=$((FAIL + 1))
+fi
 
 # --- Cloud (credentials optional) -------------------------------------------
 ALLOW_BODY='error|success|available|configured' check "GET  cloud/status" 200 "$BASE/api/cloud/status"
@@ -182,6 +199,23 @@ fi
 check "GET  bad session -> 400/404"   "400|404" -H "$J" "$BASE/api/excel/..%2F..%2Fetc/passwd/analyze/$SHEET"
 check "POST predict bad format -> 400" 400 -X POST -H "$J" -d '{}' "$BASE/api/excel/$SID/predict/$SHEET"
 check "GET  export bad format -> 400"  400 "$BASE/api/excel/$SID/export/$SHEET?format=bogus"
+
+# --- No internal detail leaks to clients ------------------------------------
+# A missing session used to answer 500 with the Python traceback and absolute
+# paths baked into it. It must be a clean error with no interpreter internals.
+LEAK="$(curl -s -m 30 "$BASE/api/excel/missing-session-xyz/analyze/Sheet1")"
+if grep -qE 'Traceback|/home/|/app/|File "|\.py"' <<<"$LEAK"; then
+    red "FAIL  error body leaks internals"
+    printf '      %s\n' "$(head -c 300 <<<"$LEAK")"
+    FAIL=$((FAIL + 1))
+elif grep -q '"error_id"' <<<"$LEAK"; then
+    green "PASS  error body sanitized (error_id present, no traceback/paths)"
+    PASS=$((PASS + 1))
+else
+    red "FAIL  unexpected error body"
+    printf '      %s\n' "$(head -c 300 <<<"$LEAK")"
+    FAIL=$((FAIL + 1))
+fi
 
 echo
 echo "==============================="
