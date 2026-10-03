@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -65,13 +66,54 @@ app.get('/', (req, res) => {
 // Use the API routes
 app.use('/api', apiRoutes);
 
-// Global error handler
-app.use((err, req, res, next) => {
-    console.error('Error:', err);
-    res.status(err.status || 500).json({
+// Global error handler.
+//
+// Every route funnels failures here via next(error). Most of them are Python
+// helper failures whose message embeds the interpreter's stderr, i.e. a full
+// traceback with absolute paths, e.g.:
+//
+//   Python process failed: Traceback (most recent call last):
+//     File "/home/keke/api/excel_processor.py", line 884, in main
+//       raise FileNotFoundError(f"Session not found: {session_id}")
+//
+// None of that may reach the client. Server-side failures are answered with a
+// generic message plus a correlation id that is logged in full.
+function clientSafeMessage(message) {
+    const raw = String(message || '');
+    if (/Traceback \(most recent call last\)/.test(raw)) {
+        return 'Internal Server Error';
+    }
+    return raw.replace(/(?:\/[\w.@+-]+){2,}/g, '<path>');
+}
+
+function classifyError(err) {
+    if (err.status && err.status < 500) {
+        return { status: err.status, message: clientSafeMessage(err.message) };
+    }
+    if (err.code === 'LIMIT_FILE_SIZE' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return { status: 413, message: 'Uploaded file is too large.' };
+    }
+    const raw = String(err.message || '');
+    if (/not found/i.test(raw)) {
+        return { status: 404, message: 'The requested session, sheet, or column was not found.' };
+    }
+    if (/Unsupported |must be |Invalid |Unsupported format|Invalid file type/i.test(raw)) {
+        return { status: 400, message: 'The request was invalid.' };
+    }
+    return { status: 500, message: null };
+}
+
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+    const errorId = crypto.randomBytes(6).toString('hex');
+    const { status, message } = classifyError(err);
+
+    console.error(`[error ${errorId}] ${req.method} ${req.originalUrl} -> ${status}:`, err);
+
+    res.status(status).json({
         error: {
-            message: err.message || 'Internal Server Error',
-            status: err.status || 500,
+            message: message || 'The server failed to process the request.',
+            status,
+            error_id: errorId,
             timestamp: new Date().toISOString()
         }
     });

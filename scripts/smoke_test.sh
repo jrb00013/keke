@@ -200,6 +200,23 @@ check "GET  bad session -> 400/404"   "400|404" -H "$J" "$BASE/api/excel/..%2F..
 check "POST predict bad format -> 400" 400 -X POST -H "$J" -d '{}' "$BASE/api/excel/$SID/predict/$SHEET"
 check "GET  export bad format -> 400"  400 "$BASE/api/excel/$SID/export/$SHEET?format=bogus"
 
+# --- No internal detail leaks to clients ------------------------------------
+# A missing session used to answer 500 with the Python traceback and absolute
+# paths baked into it. It must be a clean error with no interpreter internals.
+LEAK="$(curl -s -m 30 "$BASE/api/excel/missing-session-xyz/analyze/Sheet1")"
+if grep -qE 'Traceback|/home/|/app/|File "|\.py"' <<<"$LEAK"; then
+    red "FAIL  error body leaks internals"
+    printf '      %s\n' "$(head -c 300 <<<"$LEAK")"
+    FAIL=$((FAIL + 1))
+elif grep -q '"error_id"' <<<"$LEAK"; then
+    green "PASS  error body sanitized (error_id present, no traceback/paths)"
+    PASS=$((PASS + 1))
+else
+    red "FAIL  unexpected error body"
+    printf '      %s\n' "$(head -c 300 <<<"$LEAK")"
+    FAIL=$((FAIL + 1))
+fi
+
 echo
 echo "==============================="
 echo " passed: $PASS   failed: $FAIL"
