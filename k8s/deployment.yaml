@@ -36,41 +36,46 @@ spec:
             configMapKeyRef:
               name: keke-config
               key: KEKE_ENV
-        - name: HOST
-          valueFrom:
-            configMapKeyRef:
-              name: keke-config
-              key: HOST
         - name: PORT
           valueFrom:
             configMapKeyRef:
               name: keke-config
               key: PORT
-        - name: DEBUG
-          valueFrom:
-            configMapKeyRef:
-              name: keke-config
-              key: DEBUG
         - name: AI_ENABLED
           valueFrom:
             configMapKeyRef:
               name: keke-config
               key: AI_ENABLED
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: keke-secrets
-              key: OPENAI_API_KEY
-        - name: ANTHROPIC_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: keke-secrets
-              key: ANTHROPIC_API_KEY
-        - name: DATABASE_URL
+        - name: MAX_FILE_SIZE
           valueFrom:
             configMapKeyRef:
               name: keke-config
-              key: DATABASE_URL
+              key: MAX_FILE_SIZE
+        - name: KEKE_SESSION_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: KEKE_SESSION_DIR
+        - name: PYTHON_TIMEOUT_MS
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: PYTHON_TIMEOUT_MS
+        - name: ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: ALLOWED_ORIGINS
+        - name: KEKE_RTOS_SOCKET
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: KEKE_RTOS_SOCKET
+        - name: POSTGRES_URL
+          valueFrom:
+            configMapKeyRef:
+              name: keke-config
+              key: POSTGRES_URL
         - name: REDIS_URL
           valueFrom:
             configMapKeyRef:
@@ -81,21 +86,18 @@ spec:
             configMapKeyRef:
               name: keke-config
               key: MONGODB_URL
-        - name: MAX_FILE_SIZE
+        - name: OPENAI_API_KEY
           valueFrom:
-            configMapKeyRef:
-              name: keke-config
-              key: MAX_FILE_SIZE
-        - name: WORKER_PROCESSES
+            secretKeyRef:
+              name: keke-secrets
+              key: OPENAI_API_KEY
+          optional: true
+        - name: ANTHROPIC_API_KEY
           valueFrom:
-            configMapKeyRef:
-              name: keke-config
-              key: WORKER_PROCESSES
-        - name: LOG_LEVEL
-          valueFrom:
-            configMapKeyRef:
-              name: keke-config
-              key: LOG_LEVEL
+            secretKeyRef:
+              name: keke-secrets
+              key: ANTHROPIC_API_KEY
+          optional: true
         resources:
           requests:
             memory: "512Mi"

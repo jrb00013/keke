@@ -48,6 +48,47 @@ def pod_template_labels(doc):
     return doc["spec"]["template"]["metadata"].get("labels", {})
 
 
+def application_env_vars():
+    """Environment variables the application source actually reads.
+
+    Used to catch manifests that set variables nothing consumes, which is
+    indistinguishable from a working configuration until the feature is
+    needed and silently does nothing.
+    """
+    import re
+
+    roots = [K8S_DIR.parent / "api"]
+    patterns = (
+        re.compile(r"process\.env\.([A-Z_][A-Z0-9_]*)"),
+        re.compile(r"os\.environ\.get\(\s*['\"]([A-Z_][A-Z0-9_]*)"),
+        re.compile(r"os\.getenv\(\s*['\"]([A-Z_][A-Z0-9_]*)"),
+    )
+    found: set[str] = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in list(root.rglob("*.js")) + list(root.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for pattern in patterns:
+                found.update(pattern.findall(text))
+
+    # run.py is the container entrypoint and reports these in its startup
+    # banner; Dockerfile sets the runtime ones.
+    for path in (K8S_DIR.parent / "run.py", K8S_DIR.parent / "Dockerfile"):
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for pattern in patterns:
+            found.update(pattern.findall(text))
+    found.update({"NODE_ENV", "PYTHONPATH", "MPLBACKEND", "PYTHONUNBUFFERED"})
+    return found
+
+
 def main() -> int:
     if not K8S_DIR.is_dir():
         print(f"no {K8S_DIR} directory")
@@ -127,6 +168,21 @@ def main() -> int:
                             f"{env['name']} references undefined ConfigMap "
                             f"'{name}' key '{key}'"
                         )
+
+    # A referenced key existing is necessary but not sufficient: a manifest can
+    # also set variables that no code path reads, which looks configured but
+    # does nothing. Flag those on the application workload.
+    read_env = application_env_vars()
+    for fname, doc in docs:
+        if doc.get("kind") != "Deployment" or doc["metadata"]["name"] != "keke-app":
+            continue
+        for container in doc["spec"]["template"]["spec"].get("containers", []):
+            for env in container.get("env", []):
+                if env["name"] not in read_env:
+                    errors.append(
+                        f"{fname}: Deployment/keke-app env {env['name']} is never read "
+                        f"by the application (remove it or implement a reader)"
+                    )
 
     if errors:
         print("k8s validation failed:")

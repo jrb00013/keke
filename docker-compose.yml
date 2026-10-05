@@ -22,7 +22,9 @@ services:
     build: .
     image: keke-excel-tool:latest
     ports:
-      - "3000:3000"
+      # Host port is configurable so the app can run alongside an existing
+      # service on 3000. The container always listens on 3000 internally.
+      - "${KEKE_HOST_PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"

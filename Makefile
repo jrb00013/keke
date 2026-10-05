@@ -1,57 +1,132 @@
-# Compiler and Assembler
-CC = gcc
-AS = nasm
-LD = ld
+# Keke - Excel Datasheet Tool
+#
+# Thin wrapper around the commands CI runs, plus the Docker Compose stacks.
+# Anything here should be safe to run from a clean checkout after
+# `make install`.
 
-# Compilation Flags
-CFLAGS = -m32 -Wall -O2 -g -ffreestanding -nostdlib -fno-builtin
-ASFLAGS = -f elf32
-LDFLAGS = -T linker/linker.ld -m elf_i386
+SHELL := /bin/bash
+PY := python3
+VENV := .venv
+BIN := $(VENV)/bin
+COMPOSE := docker compose
+PROFILES := databases,monitoring,proxy,logging
 
-# Directories
-SRC_DIR = src
-BOOT_DIR = boot
-INCLUDE_DIR = include
-BUILD_DIR = build
+.DEFAULT_GOAL := help
 
-# Source Files
-SRC_C = $(wildcard $(SRC_DIR)/*.c)
-SRC_ASM = $(wildcard $(BOOT_DIR)/*.asm)
+.PHONY: help
+help: ## Show this help
+	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-# Object Files
-OBJ_C = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRC_C))
-OBJ_ASM = $(patsubst $(BOOT_DIR)/%.asm, $(BUILD_DIR)/%.o, $(SRC_ASM))
-OBJS = $(OBJ_C) $(OBJ_ASM)
+$(BIN)/python:
+	$(PY) -m venv $(VENV)
 
-# Output Files
-KERNEL_BIN = $(BUILD_DIR)/kernel.bin
-OS_BIN = $(BUILD_DIR)/os.bin
+# ---------------------------------------------------------------- setup ----
 
-# Default Target
-all: $(OS_BIN)
+.PHONY: install
+install: $(BIN)/python ## Install Node and Python dependencies
+	npm ci
+	$(BIN)/pip install -r requirements.txt
 
-# Compile C source files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+.PHONY: setup
+setup: ## Alias for install
+	@$(MAKE) install
 
-# Assemble assembly source files
-$(BUILD_DIR)/%.o: $(BOOT_DIR)/%.asm
-	@mkdir -p $(BUILD_DIR)
-	$(AS) $(ASFLAGS) $< -o $@
+# ------------------------------------------------------------------ run ----
 
-# Link kernel binary
-$(KERNEL_BIN): $(OBJS)
-	$(LD) $(LDFLAGS) -o $(KERNEL_BIN) $(OBJS)
+.PHONY: start
+start: ## Start the app (AI disabled by default)
+	npm start
 
-# Merge bootloader and kernel into final OS binary
-$(OS_BIN): $(KERNEL_BIN)
-	cat $(BOOT_DIR)/bootloader.bin $(KERNEL_BIN) > $(OS_BIN)
+.PHONY: dev
+dev: ## Start the app with hot reload
+	npm run dev
 
-# Run OS in QEMU
-run: $(OS_BIN)
-	qemu-system-i386 -kernel $(OS_BIN)
+.PHONY: smoke
+smoke: ## Run the end-to-end smoke test against a running server
+	@echo "Requires a running server (PORT ?= 3000)"
+	./scripts/smoke_test.sh $${PORT:-3000}
 
-# Clean build files
-clean:
-	rm -rf $(BUILD_DIR)
+# ----------------------------------------------------------------- test ----
+
+.PHONY: test
+test: test-js test-py ## Run all tests
+
+.PHONY: test-js
+test-js: ## Run the Node test suite
+	npm test
+
+.PHONY: test-py
+test-py: ## Run the Python test suite
+	$(BIN)/python -m pytest tests/ -q
+
+.PHONY: lint
+lint: lint-js lint-py ## Run all linters
+
+.PHONY: lint-js
+lint-js: ## Lint JavaScript
+	npm run lint
+
+.PHONY: lint-py
+lint-py: ## Lint Python (syntax/undefined names, then formatting)
+	$(BIN)/flake8 api/ --count --select=E9,F63,F7,F82 --show-source --statistics
+	$(BIN)/black --check api/
+
+.PHONY: format
+format: ## Format Python in place
+	$(BIN)/black api/
+
+# ------------------------------------------------------------ validate -----
+
+.PHONY: validate
+validate: validate-k8s validate-compose ## Run the deploy-config validators
+
+.PHONY: validate-k8s
+validate-k8s: ## Check the Kubernetes manifests are internally consistent
+	$(BIN)/python scripts/validate_k8s.py
+
+.PHONY: validate-compose
+validate-compose: ## Check docker-compose.yml renders (all profiles)
+	COMPOSE_PROFILES=$(PROFILES) $(COMPOSE) config -q
+
+# --------------------------------------------------------------- docker ----
+
+.PHONY: up
+up: ## Start the application in Docker
+	$(COMPOSE) up -d --build keke-app
+
+.PHONY: up-databases
+up-databases: ## Start the app plus redis, mongodb and postgres
+	$(COMPOSE) --profile databases up -d --build
+
+.PHONY: up-monitoring
+up-monitoring: ## Start the app plus prometheus and grafana
+	$(COMPOSE) --profile monitoring up -d
+
+.PHONY: up-proxy
+up-proxy: ## Start the app plus the nginx reverse proxy
+	$(COMPOSE) --profile proxy up -d
+
+.PHONY: up-all
+up-all: ## Start every optional stack (databases, monitoring, proxy, ELK)
+	$(COMPOSE) --profile $(PROFILES) up -d
+
+.PHONY: down
+down: ## Stop and remove the containers
+	$(COMPOSE) --profile $(PROFILES) down --remove-orphans
+
+.PHONY: logs
+logs: ## Follow the application logs
+	$(COMPOSE) logs -f keke-app
+
+# ------------------------------------------------------------ kubernetes ---
+
+.PHONY: k8s-check
+k8s-check: validate-k8s ## Alias for validate-k8s
+
+# ----------------------------------------------------------------- clean ---
+
+.PHONY: clean
+clean: ## Remove build/test artifacts (keeps .venv and node_modules)
+	rm -rf .pytest_cache .coverage coverage.xml htmlcov __pycache__ logs
+	find api tests scripts -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""
-Keke - Advanced AI-Powered Excel Datasheet Tool
-Comprehensive startup script for development and production environments
+"""Keke - Excel Datasheet Tool
+Startup script for development and production environments
 """
 
 import os
@@ -19,11 +18,17 @@ import requests
 from datetime import datetime
 
 # Configure logging
+#
+# Logs go to logs/keke.log rather than the repository root: a root-level
+# keke.log was committed to git and would be recreated on every run.
+LOG_DIR = Path(__file__).parent / 'logs'
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('keke.log'),
+        logging.FileHandler(LOG_DIR / 'keke.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -59,7 +64,7 @@ class KekeRunner:
             'ai_enabled': os.getenv('AI_ENABLED', 'false').lower() == 'true',
             'openai_api_key': os.getenv('OPENAI_API_KEY'),
             'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY'),
-            'database_url': os.getenv('DATABASE_URL', 'sqlite:///keke.db'),
+            'database_url': os.getenv('POSTGRES_URL', 'postgresql://postgres:password@localhost:5432/keke'),
             'redis_url': os.getenv('REDIS_URL', 'redis://localhost:6379'),
             'mongodb_url': os.getenv('MONGODB_URL', 'mongodb://localhost:27017/keke'),
             'postgres_url': os.getenv('POSTGRES_URL', 'postgresql://postgres:password@localhost:5432/keke'),
@@ -114,22 +119,27 @@ class KekeRunner:
             return False
         
         # Check npm packages
+        #
+        # npm is a development-time tool. The production image ships
+        # node_modules but not npm, so a missing npm is a warning here; only
+        # node itself is fatal.
         try:
             result = subprocess.run(['npm', 'list', '--depth=0'], capture_output=True, text=True)
             if result.returncode != 0:
                 logger.warning("npm packages not installed. Run 'npm install' first.")
         except FileNotFoundError:
-            logger.error("npm not found. Please install npm")
-            return False
+            logger.warning("npm not found. Skipping npm package check (not needed at runtime).")
         
         # Check Python packages
+        #
+        # pip3 is only needed to install packages, which the image has already
+        # done, so its absence is likewise not fatal.
         try:
             result = subprocess.run(['pip3', 'list'], capture_output=True, text=True)
             if 'pandas' not in result.stdout:
                 logger.warning("Python packages not installed. Run 'pip install -r requirements.txt' first.")
         except FileNotFoundError:
-            logger.error("pip3 not found. Please install pip")
-            return False
+            logger.warning("pip3 not found. Skipping Python package check (not needed at runtime).")
         
         # Check AI API keys
         if self.config['ai_enabled']:
@@ -162,77 +172,68 @@ class KekeRunner:
         if not self.docker_client:
             logger.warning("Docker not available. Skipping database containers.")
             return False
-        
+
         logger.info("Starting database containers...")
-        
+
         try:
-            # Check if docker-compose is available
-            result = subprocess.run(['docker-compose', '--version'], capture_output=True, text=True)
+            # Check if the Compose v2 plugin is available
+            result = subprocess.run(
+                ['docker', 'compose', 'version'], capture_output=True, text=True
+            )
             if result.returncode != 0:
-                logger.warning("docker-compose not available. Skipping database containers.")
+                logger.warning("docker compose not available. Skipping database containers.")
                 return False
-            
-            # Start only database services
-            services = ['redis', 'mongodb', 'postgres']
-            for service in services:
-                logger.info(f"Starting {service}...")
-                result = subprocess.run([
-                    'docker-compose', 'up', '-d', service
-                ], cwd=self.project_root, capture_output=True, text=True)
-                
-                if result.returncode != 0:
-                    logger.error(f"Failed to start {service}: {result.stderr}")
-                    return False
-                
-                logger.info(f"{service} started successfully")
-            
-            # Wait for services to be ready
+
+            # The datastores are behind the optional `databases` profile.
+            result = subprocess.run(
+                ['docker', 'compose', '--profile', 'databases', 'up', '-d',
+                 'redis', 'mongodb', 'postgres'],
+                cwd=self.project_root, capture_output=True, text=True
+            )
+            if result.returncode != 0:
+                logger.error(f"Failed to start datastores: {result.stderr}")
+                return False
+
+            logger.info("redis, mongodb and postgres started")
             self._wait_for_services()
             return True
-            
+
         except Exception as e:
             logger.error(f"Error starting database containers: {e}")
             return False
-    
+
     def _wait_for_services(self):
-        """Wait for database services to be ready"""
-        logger.info("Waiting for services to be ready...")
-        
+        """Wait for database services to accept TCP connections"""
+        import socket
+
+        logger.info("Waiting for database services to be ready...")
+
         services = {
-            'redis': 'http://localhost:6379',
-            'mongodb': 'mongodb://localhost:27017',
-            'postgres': 'postgresql://postgres:password@localhost:5432/keke'
+            'redis': 6379,
+            'mongodb': 27017,
+            'postgres': 5432
         }
-        
-        for service, url in services.items():
+
+        for service, port in services.items():
             max_attempts = 30
-            attempt = 0
-            
-            while attempt < max_attempts:
+            ready = False
+            for _ in range(max_attempts):
                 try:
-                    if service == 'redis':
-                        # Redis doesn't have HTTP, just check if port is open
-                        import socket
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        result = sock.connect_ex(('localhost', 6379))
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(2)
+                    if sock.connect_ex(('localhost', port)) == 0:
+                        ready = True
                         sock.close()
-                        if result == 0:
-                            logger.info(f"{service} is ready")
-                            break
-                    else:
-                        # For other services, we'll assume they're ready after a delay
-                        time.sleep(2)
-                        logger.info(f"{service} is ready")
                         break
-                        
-                except Exception as e:
+                    sock.close()
+                except OSError as e:
                     logger.debug(f"{service} not ready yet: {e}")
-                
-                attempt += 1
                 time.sleep(1)
-            
-            if attempt >= max_attempts:
-                logger.warning(f"{service} may not be ready")
+
+            if ready:
+                logger.info(f"{service} is ready on port {port}")
+            else:
+                logger.warning(f"{service} did not open port {port} within {max_attempts}s")
     
     def _start_monitoring(self):
         """Start monitoring services if enabled"""
@@ -242,22 +243,25 @@ class KekeRunner:
         logger.info("Starting monitoring services...")
         
         try:
-            # Start Prometheus
+            # Prometheus and Grafana are behind the optional `monitoring` profile.
             result = subprocess.run([
-                'docker-compose', 'up', '-d', 'prometheus'
+                'docker', 'compose', '--profile', 'monitoring', 'up', '-d', 'prometheus'
             ], cwd=self.project_root, capture_output=True, text=True)
-            
+
             if result.returncode == 0:
                 logger.info("Prometheus started")
-            
-            # Start Grafana
+            else:
+                logger.warning(f"Could not start Prometheus: {result.stderr.strip()}")
+
             result = subprocess.run([
-                'docker-compose', 'up', '-d', 'grafana'
+                'docker', 'compose', '--profile', 'monitoring', 'up', '-d', 'grafana'
             ], cwd=self.project_root, capture_output=True, text=True)
-            
+
             if result.returncode == 0:
                 logger.info("Grafana started")
-                
+            else:
+                logger.warning(f"Could not start Grafana: {result.stderr.strip()}")
+
         except Exception as e:
             logger.warning(f"Could not start monitoring services: {e}")
     
@@ -381,9 +385,9 @@ class KekeRunner:
         if self.docker_client:
             try:
                 result = subprocess.run([
-                    'docker-compose', 'down'
+                    'docker', 'compose', 'down'
                 ], cwd=self.project_root, capture_output=True, text=True)
-                
+
                 if result.returncode == 0:
                     logger.info("Docker containers stopped")
                 else:

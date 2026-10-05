@@ -183,208 +183,127 @@ metadata:
     component: monitoring
 data:
   prometheus.yml: |
+    # Prometheus scrape configuration.
+    #
+    # Every target below is scrapeable as configured. The previous version pointed
+    # at /node-metrics and /freertos-metrics (endpoints the server never
+    # implemented), scraped redis/mongodb/postgres on their raw protocol ports
+    # (those need the corresponding *_exporter sidecars) and scraped
+    # /nginx_status (not defined in nginx.conf), so every job was permanently
+    # down.
+    #
+    # Kubernetes service discovery is intentionally absent: the manifests ship no
+    # ServiceAccount or RBAC, so the default service account cannot list pods,
+    # nodes or endpoints. To monitor the cluster, grant the Prometheus service
+    # account list/watch on those resources and re-add the kubernetes_sd_configs
+    # jobs (see k8s/monitoring.yaml).
+
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
-    
+
     rule_files:
       - "keke_rules.yml"
-    
+
+    # No Alertmanager is deployed, so alerts are only visible in the Prometheus UI.
+    # Add an Alertmanager service and re-enable this block to route them:
+    #
+    # alerting:
+    #   alertmanagers:
+    #     - static_configs:
+    #         - targets:
+    #           - alertmanager:9093
+
     scrape_configs:
+      # The application. Serves Prometheus text format on /metrics.
       - job_name: 'keke-app'
-        static_configs:
-          - targets: ['keke-service:3000']
         metrics_path: '/metrics'
-        scrape_interval: 30s
-      
-      - job_name: 'kubernetes-pods'
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-            action: keep
-            regex: true
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-            action: replace
-            target_label: __metrics_path__
-            regex: (.+)
-          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-            action: replace
-            regex: ([^:]+)(?::\d+)?;(\d+)
-            replacement: $1:$2
-            target_label: __address__
-          - action: labelmap
-            regex: __meta_kubernetes_pod_label_(.+)
-          - source_labels: [__meta_kubernetes_namespace]
-            action: replace
-            target_label: kubernetes_namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            action: replace
-            target_label: kubernetes_pod_name
+        static_configs:
+          - targets: ['keke-app:3000']
+        scrape_interval: 10s
+        scrape_timeout: 5s
 
   keke_rules.yml: |
+    # Alerting rules for metrics the app actually exposes.
+    #
+    # The previous file alerted on node_cpu_seconds_total, node_memory_*,
+    # kube_pod_container_status_restarts_total, freertos_task_queue_size,
+    # redis_connected_clients, mongodb_connections_current,
+    # postgresql_stat_activity_count, keke_file_uploads_total,
+    # keke_file_processing_duration_seconds, keke_cloud_service_status and
+    # ssl_cert_not_after. None of those series are produced by any deployed
+    # component, so every rule could never fire.
+    #
+    # Only metrics served from /metrics are referenced here. Rules that need
+    # exporters (node_exporter, kube-state-metrics, redis_exporter,
+    # postgres_exporter, mongodb_exporter, blackbox_exporter) live in
+    # keke_rules.exporters.yml, which is not loaded by default.
     groups:
-    - name: keke.rules
-      rules:
-      # High CPU usage alert
-      - alert: HighCPUUsage
-        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High CPU usage detected"
-          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+      - name: keke.app
+        rules:
+          - alert: KekeAppDown
+            expr: up{job="keke-app"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Keke application is down"
+              description: "Prometheus has been unable to scrape {{ $labels.instance }} for more than 1 minute"
 
-      # High memory usage alert
-      - alert: HighMemoryUsage
-        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High memory usage detected"
-          description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+          - alert: KekeHighErrorRate
+            expr: |
+              sum(rate(keke_http_requests_total{status=~"5.."}[5m]))
+                / clamp_min(sum(rate(keke_http_requests_total[5m])), 0.001) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High error rate"
+              description: "More than 5% of requests have failed with 5xx for 5 minutes"
 
-      # Disk space alert
-      - alert: LowDiskSpace
-        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 90
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Low disk space"
-          description: "Disk space is below 10% on {{ $labels.instance }}"
+          - alert: KekeSlowResponses
+            expr: |
+              histogram_quantile(0.95,
+                sum by (le) (rate(keke_http_request_duration_seconds_bucket[5m]))
+              ) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High response time"
+              description: "95th percentile request duration is above 2 seconds"
 
-      # Keke application down
-      - alert: KekeAppDown
-        expr: up{job="keke-app"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Keke application is down"
-          description: "Keke application has been down for more than 1 minute"
+          - alert: KekeProcessMemoryHigh
+            expr: keke_process_resident_memory_bytes > 536870912
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Keke process memory is high"
+              description: "The Node process is holding more than 512MB resident for 10 minutes"
 
-      # High response time
-      - alert: HighResponseTime
-        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High response time"
-          description: "95th percentile response time is above 2 seconds"
+      - name: keke.python
+        rules:
+          # A timeout means a Python helper hit PYTHON_TIMEOUT_MS and was killed.
+          - alert: KekePythonTimeouts
+            expr: sum(increase(keke_python_calls_total{outcome="timeout"}[10m])) > 0
+            for: 0m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Python helper timed out"
+              description: "A Python helper exceeded PYTHON_TIMEOUT_MS and was SIGKILLed; check PYTHON_TIMEOUT_MS and the workload"
 
-      # High error rate
-      - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High error rate"
-          description: "Error rate is above 5% for more than 5 minutes"
-
-      # FreeRTOS task queue full
-      - alert: FreeRTOSTaskQueueFull
-        expr: freertos_task_queue_size / freertos_task_queue_capacity > 0.9
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "FreeRTOS task queue nearly full"
-          description: "FreeRTOS task queue is more than 90% full"
-
-      # Redis connection issues
-      - alert: RedisConnectionIssues
-        expr: redis_connected_clients == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Redis connection issues"
-          description: "No Redis clients connected"
-
-      # MongoDB connection issues
-      - alert: MongoDBConnectionIssues
-        expr: mongodb_connections_current == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "MongoDB connection issues"
-          description: "No MongoDB connections active"
-
-      # PostgreSQL connection issues
-      - alert: PostgreSQLConnectionIssues
-        expr: postgresql_stat_activity_count == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "PostgreSQL connection issues"
-          description: "No PostgreSQL connections active"
-
-      # High file upload rate
-      - alert: HighFileUploadRate
-        expr: rate(keke_file_uploads_total[5m]) > 10
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High file upload rate"
-          description: "File upload rate is above 10 files per minute"
-
-      # Large file processing time
-      - alert: LongFileProcessingTime
-        expr: histogram_quantile(0.95, rate(keke_file_processing_duration_seconds_bucket[5m])) > 300
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Long file processing time"
-          description: "95th percentile file processing time is above 5 minutes"
-
-      # Cloud service failures
-      - alert: CloudServiceFailure
-        expr: keke_cloud_service_status == 0
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Cloud service failure"
-          description: "Cloud service {{ $labels.service }} is not responding"
-
-      # Memory leak detection
-      - alert: MemoryLeak
-        expr: increase(node_memory_MemTotal_bytes[1h]) > 0 and increase(node_memory_MemAvailable_bytes[1h]) < 0
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Potential memory leak"
-          description: "Memory usage is increasing without corresponding availability increase"
-
-      # Pod restart alert
-      - alert: PodRestart
-        expr: increase(kube_pod_container_status_restarts_total[1h]) > 0
-        for: 0m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Pod restarted"
-          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted"
-
-      # Certificate expiration
-      - alert: CertificateExpiration
-        expr: (ssl_cert_not_after - time()) / 86400 < 30
-        for: 0m
-        labels:
-          severity: warning
-        annotations:
-          summary: "SSL certificate expiring soon"
-          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value }} days"
+          - alert: KekePythonErrorRate
+            expr: |
+              sum(rate(keke_python_calls_total{outcome="error"}[5m]))
+                / clamp_min(sum(rate(keke_python_calls_total[5m])), 0.001) > 0.1
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High Python helper failure rate"
+              description: "More than 10% of Python helper invocations are failing"
 
 ---
 # Grafana ConfigMap

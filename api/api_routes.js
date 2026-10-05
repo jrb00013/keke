@@ -8,10 +8,20 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const router = express.Router();
 
-const SESSIONS_DIR = path.join(__dirname, '..', 'data', 'sessions');
+// Session storage location.
+//
+// session_store.py resolves this from KEKE_SESSION_DIR (default
+// <repo>/data/sessions), and README documents it as configurable. This side
+// used to hardcode the default, so setting KEKE_SESSION_DIR made Node write
+// each upload to data/sessions/<id>/ while Python looked in
+// KEKE_SESSION_DIR/<id>/ - every session then failed to load.
+const SESSIONS_DIR = process.env.KEKE_SESSION_DIR
+    ? path.resolve(process.env.KEKE_SESSION_DIR)
+    : path.join(__dirname, '..', 'data', 'sessions');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const TEMP_DIR = path.join(__dirname, 'temp');
 const AI_ENABLED = process.env.AI_ENABLED === 'true';
+const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE) || 50 * 1024 * 1024;
 
 for (const dir of [SESSIONS_DIR, UPLOADS_DIR, TEMP_DIR]) {
     if (!fsSync.existsSync(dir)) {
@@ -38,7 +48,8 @@ const upload = multer({
     // from a different working directory (Docker, systemd, cron).
     dest: UPLOADS_DIR,
     limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB limit or we can do more if needed I'm not sure
+        // Overridable with MAX_FILE_SIZE (bytes); defaults to 50MB.
+        fileSize: MAX_FILE_SIZE
     },
     fileFilter: (req, file, cb) => {
         const allowedTypes = [

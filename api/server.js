@@ -1,3 +1,11 @@
+// Load .env before anything reads process.env.
+//
+// README tells users to `cp env.example .env`, but nothing ever loaded it, so
+// every setting in that file was silently ignored. dotenv populates
+// process.env here; the Python helpers spawned later inherit it, so one load
+// covers the whole app.
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +15,7 @@ const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { metricsMiddleware, render: renderMetrics } = require('./metrics');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -44,8 +53,18 @@ if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Metrics. Registered before the routes so every request is timed, and
+// deliberately outside the /api/ rate limiter so scraping is never throttled.
+app.use(metricsMiddleware);
+
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Prometheus scrape endpoint.
+app.get('/metrics', (req, res) => {
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.status(200).send(renderMetrics());
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
