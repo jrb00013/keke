@@ -31,9 +31,6 @@ echo "Creating necessary directories..."
 mkdir -p api/uploads
 mkdir -p api/public
 
-echo "Setting up file permissions..."
-chmod +x api/excel_cli.py
-
 echo "Setup complete!"
 echo ""
 echo "To start the server:"

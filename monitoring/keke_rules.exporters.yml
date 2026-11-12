@@ -1,0 +1,97 @@
+# Optional alert rules that require exporters which are NOT deployed.
+#
+# Nothing here is loaded by default, and every rule will silently never fire
+# until the corresponding exporter is running. These were previously part of
+# keke_rules.yml, where they looked active but could not evaluate.
+#
+# To use them, add the needed exporter services to docker-compose.yml (or the
+# cluster) and then reference this file from prometheus.yml, e.g.:
+#
+#   rule_files:
+#     - "keke_rules.yml"
+#     - "keke_rules.exporters.yml"
+#
+# Required per rule:
+#   node_*                     node_exporter
+#   kube_pod_container_*       kube-state-metrics
+#   redis_*                    redis_exporter
+#   mongodb_*                  mongodb_exporter
+#   postgresql_*               postgres_exporter
+#   ssl_cert_not_after         blackbox_exporter
+#   freertos_task_queue_*      nothing ships this; the FreeRTOS bridge would
+#                              have to export queue depths itself
+
+groups:
+  - name: keke.exporter-backed
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}"
+
+      - alert: LowDiskSpace
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 10% on {{ $labels.instance }}"
+
+      - alert: PodRestart
+        expr: increase(kube_pod_container_status_restarts_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod restarted"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted"
+
+      - alert: RedisNoClients
+        expr: redis_connected_clients == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis has no connected clients"
+          description: "redis_exporter reports zero connected clients on {{ $labels.instance }}"
+
+      - alert: MongoDBNoConnections
+        expr: mongodb_connections_current == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MongoDB has no connections"
+          description: "mongodb_exporter reports zero connections on {{ $labels.instance }}"
+
+      - alert: PostgreSQLNoConnections
+        expr: postgresql_stat_activity_count == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL has no connections"
+          description: "postgres_exporter reports zero connections on {{ $labels.instance }}"
+
+      - alert: CertificateExpiringSoon
+        expr: (ssl_cert_not_after - time()) / 86400 < 30
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "The SSL certificate for {{ $labels.instance }} expires in under 30 days"

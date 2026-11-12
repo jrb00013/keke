@@ -15,7 +15,10 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_NAME="keke-excel-tool"
 NAMESPACE="keke"
-ENVIRONMENT=${1:-"development"}
+# $1 is the command (see the case statement at the bottom); the environment is
+# the second argument. Reading $1 here made `./deploy.sh deploy production` set
+# ENVIRONMENT="deploy", so the production-only steps never ran.
+ENVIRONMENT=${2:-"development"}
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-"ghcr.io"}
 IMAGE_TAG=${IMAGE_TAG:-"latest"}
 
@@ -74,29 +77,25 @@ setup_namespace() {
 
 deploy_configmaps() {
     log_info "Deploying ConfigMaps..."
-    
-    # Update environment-specific values
-    if [ "$ENVIRONMENT" = "production" ]; then
-        sed -i 's/KEKE_ENV: "development"/KEKE_ENV: "production"/' k8s/configmap.yaml
-        sed -i 's/DEBUG: "true"/DEBUG: "false"/' k8s/configmap.yaml
-    fi
-    
+
+    # Applied as committed. The previous version rewrote KEKE_ENV/DEBUG in place
+    # with sed, which dirtied the working tree and never got reverted.
     kubectl apply -f k8s/configmap.yaml
     log_success "ConfigMaps deployed"
 }
 
 deploy_secrets() {
     log_info "Deploying Secrets..."
-    
-    # Check if secrets file exists
+
+    # Secrets are provisioned out of band. The template is
+    # k8s/secrets.yaml.example (the script previously looked for
+    # k8s/secrets.yaml.template, which does not exist).
     if [ ! -f "k8s/secrets.yaml" ]; then
-        log_warning "Secrets file not found. Creating template..."
-        cp k8s/secrets.yaml.template k8s/secrets.yaml 2>/dev/null || {
-            log_error "Please create k8s/secrets.yaml with your actual secrets"
-            exit 1
-        }
+        log_error "k8s/secrets.yaml not found."
+        log_error "cp k8s/secrets.yaml.example k8s/secrets.yaml, fill in the values, then re-run."
+        exit 1
     fi
-    
+
     kubectl apply -f k8s/secrets.yaml
     log_success "Secrets deployed"
 }
@@ -129,16 +128,20 @@ deploy_databases() {
 
 deploy_application() {
     log_info "Deploying application..."
-    
-    # Update image tag in deployment
-    sed -i "s|keke-excel-tool:latest|$DOCKER_REGISTRY/$PROJECT_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
-    
+
     kubectl apply -f k8s/deployment.yaml
-    
+
+    # Set the image on the live Deployment rather than rewriting the manifest with
+    # sed, which dirtied the repo and could not be re-run safely.
+    log_info "Setting image to ${DOCKER_REGISTRY}/${PROJECT_NAME}:${IMAGE_TAG}"
+    kubectl set image deployment/keke-app \
+        keke-app="${DOCKER_REGISTRY}/${PROJECT_NAME}:${IMAGE_TAG}" \
+        -n $NAMESPACE
+
     # Wait for application to be ready
     log_info "Waiting for application to be ready..."
     kubectl wait --for=condition=Available deployment/keke-app -n $NAMESPACE --timeout=300s
-    
+
     log_success "Application deployed"
 }
 
@@ -170,15 +173,19 @@ deploy_autoscaling() {
 }
 
 deploy_ingress() {
-    log_info "Deploying ingress..."
-    
-    # Update domain in ingress
-    if [ "$ENVIRONMENT" = "production" ]; then
-        sed -i 's/keke.yourdomain.com/keke.yourdomain.com/g' k8s/ingress.yaml
-    else
-        sed -i 's/keke.yourdomain.com/keke-staging.yourdomain.com/g' k8s/ingress.yaml
+    log_info "Setting up ingress..."
+
+    # The manifests still carry the placeholder hosts. Rewrite them in place only
+    # when a real domain is supplied, so the repo is never silently modified.
+    if [ -n "${INGRESS_HOST:-}" ]; then
+        log_info "Setting ingress host to ${INGRESS_HOST}"
+        sed -i.bak "s/keke\.yourdomain\.com/${INGRESS_HOST}/g; s/monitoring\.yourdomain\.com/monitoring.${INGRESS_HOST}/g" k8s/ingress.yaml
+        mv k8s/ingress.yaml.bak k8s/ingress.yaml
+    elif grep -q "keke.yourdomain.com" k8s/ingress.yaml; then
+        log_warning "k8s/ingress.yaml still uses keke.yourdomain.com"
+        log_warning "Edit the host, or re-run with INGRESS_HOST=your.domain"
     fi
-    
+
     kubectl apply -f k8s/ingress.yaml
     log_success "Ingress deployed"
 }

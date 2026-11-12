@@ -4,7 +4,6 @@ import tempfile
 import os
 import sys
 import pandas as pd
-from unittest.mock import Mock, patch
 import logging
 
 # Add the api directory to the path
@@ -90,36 +89,6 @@ def temp_json_file(sample_excel_data):
     os.unlink(tmp.name)
 
 @pytest.fixture
-def mock_cloud_config():
-    """Create mock cloud configuration"""
-    from cloud_services import CloudConfig
-    return CloudConfig(
-        aws_access_key='test_key',
-        aws_secret_key='test_secret',
-        aws_region='us-east-1',
-        azure_connection_string='test_connection',
-        gcp_credentials_path='test_credentials.json',
-        redis_url='redis://localhost:6379',
-        mongodb_url='mongodb://localhost:27017',
-        postgres_url='postgresql://localhost:5432/keke'
-    )
-
-@pytest.fixture
-def mock_freertos_kernel():
-    """Create mock FreeRTOS kernel"""
-    from freertos_integration import FreeRTOSKernel, TaskPriority
-    
-    kernel = FreeRTOSKernel(max_tasks=10)
-    
-    # Create some test resources
-    kernel.create_semaphore('test_sem', 2)
-    kernel.create_event_group('test_event')
-    kernel.create_timer('test_timer', 1000, True)
-    kernel.create_memory_pool('test_pool', 1024, 5)
-    
-    return kernel
-
-@pytest.fixture
 def mock_excel_processor():
     """Create mock Excel processor"""
     from excel_processor import ExcelProcessor
@@ -135,100 +104,6 @@ def mock_excel_processor():
     processor.dataframes['TestSheet'] = test_data
     
     return processor
-
-@pytest.fixture
-def mock_aws_service(mock_cloud_config):
-    """Create mock AWS service"""
-    with patch('cloud_services.boto3.Session') as mock_session:
-        mock_s3 = Mock()
-        mock_lambda = Mock()
-        mock_dynamodb = Mock()
-        mock_sqs = Mock()
-        mock_sns = Mock()
-        mock_cloudwatch = Mock()
-        
-        mock_session.return_value.client.side_effect = [
-            mock_s3, mock_lambda, mock_sqs, mock_sns, mock_cloudwatch
-        ]
-        mock_session.return_value.resource.return_value = mock_dynamodb
-        
-        from cloud_services import AWSCloudService
-        service = AWSCloudService(mock_cloud_config)
-        
-        # Store mocks for testing
-        service._mocks = {
-            's3': mock_s3,
-            'lambda': mock_lambda,
-            'dynamodb': mock_dynamodb,
-            'sqs': mock_sqs,
-            'sns': mock_sns,
-            'cloudwatch': mock_cloudwatch
-        }
-        
-        return service
-
-@pytest.fixture
-def mock_redis_service(mock_cloud_config):
-    """Create mock Redis service"""
-    with patch('cloud_services.redis.from_url') as mock_redis_from_url:
-        mock_redis = Mock()
-        mock_redis_from_url.return_value = mock_redis
-        
-        from cloud_services import RedisCacheService
-        service = RedisCacheService(mock_cloud_config)
-        service._mock_redis = mock_redis
-        
-        return service
-
-@pytest.fixture
-def mock_database_service(mock_cloud_config):
-    """Create mock database service"""
-    with patch('cloud_services.pymongo.MongoClient') as mock_mongo, \
-         patch('cloud_services.create_engine') as mock_engine:
-        
-        mock_collection = Mock()
-        mock_db = Mock()
-        mock_db.excel_files = mock_collection
-        mock_client = Mock()
-        mock_client.keke = mock_db
-        mock_mongo.return_value = mock_client
-        
-        mock_engine_instance = Mock()
-        mock_connection = Mock()
-        mock_engine_instance.connect.return_value.__enter__.return_value = mock_connection
-        mock_engine.return_value = mock_engine_instance
-        
-        from cloud_services import DatabaseService
-        service = DatabaseService(mock_cloud_config)
-        
-        service._mocks = {
-            'mongo_collection': mock_collection,
-            'postgres_connection': mock_connection
-        }
-        
-        return service
-
-@pytest.fixture
-def mock_cloud_manager(mock_cloud_config):
-    """Create mock cloud service manager"""
-    with patch('cloud_services.AWSCloudService') as mock_aws, \
-         patch('cloud_services.AzureCloudService') as mock_azure, \
-         patch('cloud_services.GCPCloudService') as mock_gcp, \
-         patch('cloud_services.RedisCacheService') as mock_redis, \
-         patch('cloud_services.DatabaseService') as mock_db:
-        
-        from cloud_services import CloudServiceManager
-        manager = CloudServiceManager(mock_cloud_config)
-        
-        manager._mocks = {
-            'aws': mock_aws.return_value,
-            'azure': mock_azure.return_value,
-            'gcp': mock_gcp.return_value,
-            'redis': mock_redis.return_value,
-            'database': mock_db.return_value
-        }
-        
-        return manager
 
 @pytest.fixture
 def test_session_id():

@@ -14,7 +14,7 @@ Keke is a web-based tool for uploading, analyzing, cleaning, charting, and expor
 ## Quick start
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/jrb00013/keke.git
 cd keke
 
 python3 -m venv .venv
@@ -43,9 +43,24 @@ api/                 Express server + Python processors
   session_store.py   Disk-backed session persistence
   excel_processor.py Core spreadsheet logic
   ml_processor.py    sklearn models
+  rtos_bridge.py     HTTP routes for the FreeRTOS kernel
+  metrics.js         Prometheus exposition served at /metrics
 data/sessions/       Uploaded data (gitignored)
-legacy/              Unused RTOS experiment code
+legacy/              FreeRTOS kernel; freertos_integration.py is imported by
+                     api/rtos_bridge.py and the C sources are reference only
 k8s/                 Kubernetes manifests (optional)
+monitoring/          Prometheus config and alert rules
+```
+
+## Deployment
+
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for Docker, Kubernetes, monitoring
+and configuration. In short:
+
+```bash
+make install && make start     # local
+docker compose up              # container
+make test && make lint         # verify
 ```
 
 ## Configuration
@@ -75,8 +90,9 @@ Primitives: `excel_jobs` / `excel_results` queues, `excel_processing` semaphore 
 
 ```bash
 source .venv/bin/activate
-pytest tests/test_session_store.py tests/test_api_routes.py tests/test_excel_processor.py -q
-pytest tests/test_freertos_integration.py -q
+make test      # npx jest + python -m pytest
+npx jest       # Node only
+pytest         # Python only
 ```
 
 ## License

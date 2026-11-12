@@ -1,7 +1,11 @@
 # Multi-stage Docker build for Keke Advanced AI-Powered Excel Datasheet Tool
 
 # Stage 1: Build Node.js application
-FROM node:18-alpine AS node-builder
+#
+# Debian-based rather than Alpine on purpose. Stage 3 is python:3.11-slim
+# (glibc), so the node binary copied out of this stage has to be glibc-linked;
+# a musl/alpine binary would not run there.
+FROM node:18-bookworm-slim AS node-builder
 
 WORKDIR /app
 
@@ -15,30 +19,17 @@ RUN npm ci
 COPY api/ ./api/
 
 # Stage 2: Build Python application with AI dependencies
+#
+# No compiler or BLAS/ATLAS headers are installed: numpy, pandas, scipy,
+# scikit-learn, pyarrow and matplotlib all publish manylinux wheels for
+# cp311, so pip never needs to compile anything. The previous version of this
+# stage installed a full toolchain including libatlas-base-dev and
+# libgl1-mesa-glx, both of which have been removed from Debian. That made the
+# image unbuildable: apt failed with "no installation candidate" long before
+# pip ever ran.
 FROM python:3.11-slim AS python-builder
 
 WORKDIR /app
-
-# Install system dependencies for AI libraries
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    libffi-dev \
-    libssl-dev \
-    libblas-dev \
-    liblapack-dev \
-    libatlas-base-dev \
-    gfortran \
-    pkg-config \
-    libhdf5-dev \
-    libfreetype6-dev \
-    libpng-dev \
-    libjpeg-dev \
-    libopenblas-dev \
-    libx11-dev \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
@@ -58,17 +49,17 @@ ENV PORT=3000
 ENV PYTHONPATH=/app
 ENV MPLBACKEND=Agg
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies.
+#
+# curl is for HEALTHCHECK, libgomp1 is the OpenMP runtime that the
+# scikit-learn/scipy wheels link against. The GUI libraries that used to be
+# here (libsm6, libxext6, libxrender-dev, libgl1-mesa-glx) are not needed
+# because matplotlib runs headless under MPLBACKEND=Agg. node and npm are
+# taken from stage 1 instead of Debian's nodejs/npm packages so the runtime
+# always matches the version node_modules was built with.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    nodejs \
-    npm \
     libgomp1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user
@@ -81,13 +72,16 @@ WORKDIR /app
 COPY --from=python-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=python-builder /usr/local/bin /usr/local/bin
 
-# Copy Node.js dependencies from builder
+# Copy the Node runtime and dependencies from builder
+COPY --from=node-builder /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-builder /app/node_modules ./node_modules
 
 # Copy application code
 COPY api/ ./api/
-# legacy/ holds the FreeRTOS kernel that api/rtos_bridge.py imports. Without
-# this, every /api/rtos/* route fails with ModuleNotFoundError in the image.
+# legacy/ holds freertos_integration.py, which api/rtos_bridge.py imports at
+# module load. Without it every /api/rtos/* route fails with ImportError in
+# the image. The C sources under legacy/rtos/ are reference material only and
+# stay out of the image via .dockerignore.
 COPY legacy/ ./legacy/
 COPY package*.json ./
 COPY run.py ./

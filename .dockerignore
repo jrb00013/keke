@@ -37,4 +37,3 @@ DEPLOYMENT_GUIDE.md
 Makefile
 setup.sh
 deploy.sh
-run_tests.py

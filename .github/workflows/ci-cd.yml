@@ -78,6 +78,13 @@ jobs:
         COMPOSE_PROFILES: databases,monitoring,proxy,logging
       run: docker compose config -q
 
+    # `docker compose config` only renders the file; it never resolves a base
+    # image or runs an apt/pip step. The Dockerfile installed libatlas-base-dev
+    # and libgl1-mesa-glx, both removed from Debian, so the image could not be
+    # built and no check noticed. Build it.
+    - name: Build Docker image
+      run: docker compose build keke-app
+
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
       with:

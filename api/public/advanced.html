@@ -736,7 +736,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Formula</label>
-                    <input type="text" class="form-input" id="formulaExpression" placeholder="e.g., =SUM(A:A)">
+                    <input type="text" class="form-input" id="formulaExpression" placeholder="=SUM(A:B), =AVERAGE(A:B), =COUNT(A:B) or =A1">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Available Functions</label>
@@ -788,82 +788,40 @@
     <script>
         // Global variables
         let currentSessionId = null;
+        let currentSheetName = null;
         let currentFileInfo = null;
-        let ws = null;
         let updateCounter = 0;
 
-        // Initialize WebSocket connection
-        function initWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = function() {
-                console.log('WebSocket connected');
-                updateStatus('serverStatus', 'Connected', 'online');
-                addUpdate('WebSocket connection established');
-            };
-            
-            ws.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                handleWebSocketMessage(data);
-            };
-            
-            ws.onclose = function() {
-                console.log('WebSocket disconnected');
-                updateStatus('serverStatus', 'Disconnected', 'offline');
-                addUpdate('WebSocket connection lost');
-                
-                // Reconnect after 5 seconds
-                setTimeout(initWebSocket, 5000);
-            };
-            
-            ws.onerror = function(error) {
-                console.error('WebSocket error:', error);
-                updateStatus('serverStatus', 'Error', 'offline');
-            };
-        }
-
-        // Handle WebSocket messages
-        function handleWebSocketMessage(data) {
-            switch(data.type) {
-                case 'status_update':
-                    updateSystemStatus(data.data);
-                    break;
-                case 'task_update':
-                    updateTaskStatus(data.data);
-                    break;
-                case 'progress_update':
-                    updateProgress(data.data);
-                    break;
-                case 'notification':
-                    showNotification(data.message, data.level);
-                    break;
-                case 'real_time_data':
-                    updateRealTimeData(data.data);
-                    break;
+        // Update progress
+        function updateProgress(percentage) {
+            const progressBar = document.getElementById('progressFill');
+            if (progressBar) {
+                progressBar.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
             }
         }
 
-        // Update system status
-        function updateSystemStatus(status) {
-            updateStatus('kernelStatus', status.kernel ? 'Running' : 'Stopped', status.kernel ? 'online' : 'offline');
-            updateStatus('cloudStatus', status.cloud ? 'Available' : 'Unavailable', status.cloud ? 'online' : 'warning');
-            document.getElementById('activeTasks').textContent = status.activeTasks || 0;
-            document.getElementById('memoryUsage').textContent = `${(status.memoryUsage || 0).toFixed(1)} MB`;
-        }
-
-        // Update task status
-        function updateTaskStatus(taskData) {
-            addUpdate(`Task ${taskData.name}: ${taskData.status}`);
-        }
-
-        // Update progress
-        function updateProgress(progressData) {
-            const progressBar = document.getElementById('progressFill');
-            if (progressBar) {
-                progressBar.style.width = `${progressData.percentage}%`;
+        // Poll the server for status.
+        //
+        // This used to open a WebSocket against /ws, but the server has never
+        // exposed that endpoint, so every page load produced a connection
+        // error and a reconnect loop. /health is the only status source the
+        // server actually provides, so poll it instead.
+        async function refreshStatus() {
+            try {
+                const health = await fetch('/health');
+                if (!health.ok) {
+                    throw new Error(`health returned ${health.status}`);
+                }
+                const body = await health.json();
+                updateStatus('serverStatus', 'Online', 'online');
+                updateStatus('kernelStatus', `Up ${Math.round(body.uptime)}s`, 'online');
+                updateStatus('cloudStatus', body.version ? `v${body.version}` : 'Ready', 'online');
+                document.getElementById('activeTasks').textContent = currentSessionId ? 1 : 0;
+                document.getElementById('memoryUsage').textContent = currentSessionId ? '1 active' : '0 MB';
+            } catch (error) {
+                updateStatus('serverStatus', 'Offline', 'offline');
+                updateStatus('kernelStatus', 'Unknown', 'offline');
+                updateStatus('cloudStatus', 'Unknown', 'offline');
             }
         }
 
@@ -942,6 +900,7 @@
             showLoading();
             hideResults();
             showProgress();
+            updateProgress(5);
 
             try {
                 const formData = new FormData();
@@ -955,22 +914,115 @@
                 });
 
                 const result = await response.json();
+                updateProgress(80);
 
-                if (result.success) {
-                    currentFileInfo = result.results;
-                    currentSessionId = generateSessionId();
-                    displayFileInfo(result.results);
-                    showActions();
-                    showSuccess(`Successfully processed ${files.length} file(s)!`);
-                    addUpdate(`Processed ${files.length} file(s)`);
-                } else {
-                    showError(result.error.message || 'Upload failed');
+                if (!result.success) {
+                    throw new Error(errorMessage(result) || 'Upload failed');
                 }
+
+                const processed = result.results || [];
+                const succeeded = processed.filter(r => r.success);
+
+                if (succeeded.length === 0) {
+                    const firstError = processed.find(r => !r.success);
+                    throw new Error(
+                        firstError
+                            ? `${firstError.file}: ${firstError.error || 'could not be processed'}`
+                            : 'No file could be processed'
+                    );
+                }
+
+                currentFileInfo = processed;
+
+                // The session id must come from the server. The old code
+                // invented one with Math.random(), which produced a session
+                // that had never been persisted, so every follow-up call
+                // (analyze, clean, chart, export) 404'd.
+                const first = succeeded[0].data || {};
+                currentSessionId = first.session_id;
+                currentSheetName = (first.sheet_names && first.sheet_names[0]) || null;
+
+                if (!currentSessionId) {
+                    throw new Error('Server did not return a session id');
+                }
+
+                displayFileInfo(processed);
+                populateColumnSelects();
+                showActions();
+                showSuccess(`Successfully processed ${succeeded.length} of ${files.length} file(s)!`);
+                addUpdate(`Processed ${succeeded.length} file(s), session ${currentSessionId.slice(0, 8)}`);
             } catch (error) {
                 showError('Upload failed: ' + error.message);
             } finally {
+                updateProgress(100);
                 hideLoading();
                 hideProgress();
+            }
+        }
+
+        // Error payloads are inconsistent across routes: some return
+        // { error: { message, status } }, some { error: 'text' }, and rejected
+        // batch entries carry a bare string.
+        function errorMessage(result) {
+            if (!result) return '';
+            const { error } = result;
+            if (!error) return '';
+            if (typeof error === 'string') return error;
+            return error.message || JSON.stringify(error);
+        }
+
+        // Every call below needs a real server-side session id. The routes are
+        // shaped /api/excel/:sessionId/<action>/:sheetName, so these two
+        // helpers supply the two path segments.
+        function requireUpload() {
+            if (!currentSessionId) {
+                throw new Error('Upload a file first');
+            }
+            return currentSessionId;
+        }
+
+        function requireSheet() {
+            if (!currentSheetName) {
+                throw new Error('The uploaded file has no sheets');
+            }
+            return encodeURIComponent(currentSheetName);
+        }
+
+        // Fill the chart modal's column pickers from the real column names.
+        async function populateColumnSelects() {
+            const xSelect = document.getElementById('xColumn');
+            const yContainer = document.getElementById('yColumns');
+            if (!xSelect || !yContainer) return;
+
+            try {
+                const response = await fetch(
+                    `/api/excel/${currentSessionId}/columns/${encodeURIComponent(currentSheetName)}`
+                );                const body = await response.json();
+                // The route returns columns as an object keyed by column name,
+                // not an array, so Object.keys() is the column list.
+                const columns = body.columns
+                    ? Object.keys(body.columns)
+                    : (Array.isArray(body.columns) ? body.columns : []);
+
+                xSelect.innerHTML = '';
+                yContainer.innerHTML = '';
+                columns.forEach((name) => {
+                    const xOption = document.createElement('option');
+                    xOption.value = name;
+                    xOption.textContent = name;
+                    xSelect.appendChild(xOption);
+
+                    const label = document.createElement('label');
+                    label.className = 'checkbox-label';
+                    const box = document.createElement('input');
+                    box.type = 'checkbox';
+                    box.value = name;
+                    label.appendChild(box);
+                    label.appendChild(document.createTextNode(` ${name}`));
+                    yContainer.appendChild(label);
+                });
+            } catch (error) {
+                addUpdate(`Could not load columns: ${error.message}`);
             }
         }
 
@@ -979,15 +1031,21 @@
             fileDetails.innerHTML = '';
 
             fileResults.forEach((result, index) => {
+                const div = document.createElement('div');
+                div.className = 'info-item';
                 if (result.success) {
-                    const div = document.createElement('div');
-                    div.className = 'info-item';
+                    const data = result.data || {};
                     div.innerHTML = `
                         <span class="info-label">File ${index + 1}:</span>
-                        <span class="info-value">${result.file} - ${result.data.total_sheets} sheets</span>
+                        <span class="info-value">${result.file} - ${data.total_sheets} sheets (${(data.session_id || '').slice(0, 8)})</span>
                     `;
-                    fileDetails.appendChild(div);
+                } else {
+                    div.innerHTML = `
+                        <span class="info-label">File ${index + 1}:</span>
+                        <span class="info-value">${result.file} - failed: ${result.error || 'unknown error'}</span>
+                    `;
                 }
+                fileDetails.appendChild(div);
             });
 
             fileInfo.classList.add('show');
@@ -1000,17 +1058,17 @@
             hideResults();
 
             try {
-                const sheetName = 'Sheet1'; // Analyze first sheet
-                const response = await fetch(`/api/excel/${currentSessionId}/analyze/${sheetName}`);
-                const result = await response.json();
+                const response = await fetch(
+                    `/api/excel/${requireUpload()}/analyze/${requireSheet()}`
+                );                const result = await response.json();
 
-                if (result.success) {
-                    displayAnalysis(result.analysis);
-                    showSuccess('Data analysis completed successfully!');
-                    addUpdate('Data analysis completed');
-                } else {
-                    showError(result.error.message || 'Analysis failed');
+                if (!response.ok || !result.success) {
+                    throw new Error(errorMessage(result) || 'Analysis failed');
                 }
+
+                displayAnalysis(result.analysis || result.data);
+                showSuccess('Data analysis completed successfully!');
+                addUpdate('Data analysis completed');
             } catch (error) {
                 showError('Analysis failed: ' + error.message);
             } finally {
@@ -1061,15 +1119,16 @@
             if (!currentSessionId || !currentFileInfo) return;
 
             try {
-                const sheetName = 'Sheet1';
-                const response = await fetch(`/api/excel/${currentSessionId}/export/${sheetName}?format=${format}`);
-                
+                const response = await fetch(
+                    `/api/excel/${requireUpload()}/export/${requireSheet()}?format=${format}`
+                );
+
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `${sheetName}.${format}`;
+                    a.download = `${currentSheetName}.${format}`;
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
@@ -1077,10 +1136,109 @@
                     showSuccess(`Data exported as ${format.toUpperCase()} successfully!`);
                     addUpdate(`Exported data as ${format.toUpperCase()}`);
                 } else {
-                    showError('Export failed');
+                    const body = await response.json().catch(() => ({}));
+                    showError('Export failed: ' + (errorMessage(body) || response.status));
                 }
             } catch (error) {
                 showError('Export failed: ' + error.message);
+            }
+        }
+
+        // POST /api/excel/:sessionId/clean/:sheetName
+        //
+        // This function was referenced by the clean form's submit handler but
+        // never defined, so submitting the form threw a ReferenceError.
+        async function performDataCleaning(operations) {
+            try {
+                const response = await fetch(
+                    `/api/excel/${requireUpload()}/clean/${requireSheet()}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ operations })
+                    }
+                );
+                const body = await response.json();
+
+                if (!response.ok || !body.success) {
+                    throw new Error(errorMessage(body) || 'Cleaning failed');
+                }
+
+                showSuccess('Data cleaning completed!');
+                addUpdate(`Applied ${operations.length} cleaning operation(s)`);
+                return body;
+            } catch (error) {
+                showError('Data cleaning failed: ' + error.message);
+                return null;
+            }
+        }
+
+        // POST /api/excel/:sessionId/chart/:sheetName
+        //
+        // Like performDataCleaning, this was called by a form but never
+        // defined. The route validates the config under a "chart_config" key
+        // and responds with a generated .xlsx workbook, not an image, so the
+        // result is downloaded like an export.
+        async function createChart(chartConfig) {
+            try {
+                const response = await fetch(
+                    `/api/excel/${requireUpload()}/chart/${requireSheet()}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chart_config: chartConfig })
+                    }
+                );
+
+                if (!response.ok) {
+                    const body = await response.json().catch(() => ({}));
+                    throw new Error(errorMessage(body) || response.status);
+                }
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `chart_${currentSheetName}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showSuccess('Chart created successfully!');
+                addUpdate(`Created ${chartConfig.type} chart`);
+                return true;
+            } catch (error) {
+                showError('Chart creation failed: ' + error.message);
+                return false;
+            }
+        }
+
+        // POST /api/excel/:sessionId/formulas/:sheetName
+        //
+        // Also referenced by a form handler but never defined.
+        async function applyFormulas(formulas) {
+            try {
+                const response = await fetch(
+                    `/api/excel/${requireUpload()}/formulas/${requireSheet()}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ formulas })
+                    }
+                );
+                const body = await response.json();
+
+                if (!response.ok || !body.success) {
+                    throw new Error(errorMessage(body) || 'Formula application failed');
+                }
+
+                showSuccess('Formulas applied successfully!');
+                addUpdate(`Applied ${Object.keys(formulas).length} formula(s)`);
+                return body;
+            } catch (error) {
+                showError('Formula application failed: ' + error.message);
+                return null;
             }
         }
 
@@ -1158,6 +1316,53 @@
             closeModal('formulaModal');
         });
 
+        // The "Batch Process" modal had no submit handler at all, so its
+        // checkboxes did nothing. It now runs the selected steps in order over
+        // the uploaded session.
+        async function runBatchPipeline() {
+            const steps = [];
+            if (document.getElementById('batchAnalyze').checked) steps.push('analyze');
+            if (document.getElementById('batchClean').checked) steps.push('clean');
+            if (document.getElementById('batchChart').checked) steps.push('chart');
+            if (document.getElementById('batchExport').checked) {
+                steps.push(`export:${document.getElementById('batchExportFormat').value}`);
+            }
+
+            if (steps.length === 0) {
+                showError('Select at least one batch step');
+                return;
+            }
+
+            showLoading();
+            try {
+                for (const step of steps) {
+                    updateProgress(10);
+                    if (step === 'analyze') {
+                        await analyzeData();
+                    } else if (step === 'clean') {
+                        await performDataCleaning([{ type: 'remove_duplicates' }]);
+                    } else if (step === 'chart') {
+                        await createChart({ type: 'bar', title: 'Batch chart' });
+                    } else if (step.startsWith('export:')) {
+                        await exportData(step.split(':')[1]);
+                    }
+                    addUpdate(`Batch step finished: ${step}`);
+                }
+                showSuccess(`Batch complete (${steps.length} step(s))`);
+            } catch (error) {
+                showError('Batch failed: ' + error.message);
+            } finally {
+                updateProgress(100);
+                hideLoading();
+            }
+        }
+
+        document.getElementById('batchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await runBatchPipeline();
+            closeModal('batchModal');
+        });
+
         // Utility functions
         function showLoading() {
             loading.style.display = 'block';
@@ -1195,27 +1400,13 @@
             showNotification(message, 'error');
         }
 
-        function generateSessionId() {
-            return 'session_' + Math.random().toString(36).substr(2, 9);
-        }
-
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            initWebSocket();
-            
+            refreshStatus();
+            addUpdate('Ready');
+
             // Check system status periodically
-            setInterval(async () => {
-                try {
-                    const response = await fetch('/health');
-                    if (response.ok) {
-                        updateStatus('serverStatus', 'Online', 'online');
-                    } else {
-                        updateStatus('serverStatus', 'Offline', 'offline');
-                    }
-                } catch (error) {
-                    updateStatus('serverStatus', 'Offline', 'offline');
-                }
-            }, 30000);
+            setInterval(refreshStatus, 30000);
         });
     </script>
 </body>

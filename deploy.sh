@@ -92,113 +92,155 @@ push_docker_image() {
 
 deploy_docker_compose() {
     log_info "Deploying with Docker Compose..."
-    
-    # Create necessary directories
-    mkdir -p uploads logs data ssl
-    
-    # Generate SSL certificates if they don't exist
-    if [[ ! -f ssl/cert.pem ]]; then
-        log_info "Generating self-signed SSL certificates..."
-        openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+
+    # The application is the only default-profile service. Datastores,
+    # monitoring, the proxy and ELK are opt-in profiles.
+    if ! docker compose up -d --build keke-app; then
+        log_error "docker compose failed to start keke-app"
+        exit 1
     fi
-    
-    # Start services
-    docker-compose up -d
-    
+
     log_success "Docker Compose deployment completed"
-    log_info "Services are starting up. Check status with: docker-compose ps"
+    log_info "Services are starting up. Check status with: docker compose ps"
+    log_info "Optional stacks: --profile databases | monitoring | proxy | logging"
 }
 
 deploy_kubernetes() {
     log_info "Deploying to Kubernetes..."
-    
-    # Create namespace if it doesn't exist
-    kubectl create namespace ${NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Apply secrets
-    kubectl apply -f k8s/keke-deployment.yaml
-    
+
+    # Secrets are provisioned out of band (secrets.yaml.example is a template and
+    # is never applied automatically).
+    if [[ ! -f k8s/secrets.yaml ]]; then
+        log_error "k8s/secrets.yaml is missing."
+        log_error "Copy k8s/secrets.yaml.example, fill in the values, then re-run."
+        exit 1
+    fi
+
+    # Apply in dependency order. k8s/deployment.yaml is the only Deployment for
+    # the app; the previous k8s/keke-deployment.yaml was a duplicate with a
+    # conflicting immutable selector and has been removed.
+    for manifest in \
+        k8s/namespace.yaml \
+        k8s/secrets.yaml \
+        k8s/configmap.yaml \
+        k8s/pvc.yaml \
+        k8s/database-deployments.yaml \
+        k8s/deployment.yaml \
+        k8s/service.yaml \
+        k8s/ingress.yaml \
+        k8s/hpa.yaml \
+        k8s/monitoring.yaml
+    do
+        log_info "Applying ${manifest}"
+        kubectl apply -f "${manifest}"
+    done
+
     # Wait for deployment to be ready
     log_info "Waiting for deployment to be ready..."
     kubectl wait --for=condition=available --timeout=300s deployment/keke-app -n ${NAMESPACE}
-    
+
     log_success "Kubernetes deployment completed"
     log_info "Check status with: kubectl get pods -n ${NAMESPACE}"
 }
 
 run_tests() {
-    log_info "Running comprehensive test suite..."
+    log_info "Running test suite..."
     
-    # Run tests
-    python run_tests.py --unit-only --integration-only
-    
-    if [[ $? -eq 0 ]]; then
-        log_success "All tests passed"
-    else
-        log_error "Tests failed"
+    # Same commands CI runs. run_tests.py did not exist in the shipped tree and
+    # --unit-only/--integration-only contradict each other.
+    if ! npm test; then
+        log_error "Node.js tests failed"
         exit 1
     fi
+    
+    if ! python3 -m pytest tests/ -q; then
+        log_error "Python tests failed"
+        exit 1
+    fi
+    
+    log_success "All tests passed"
 }
 
 setup_monitoring() {
     log_info "Setting up monitoring..."
-    
+
     if [[ "$DEPLOYMENT_TYPE" == "docker-compose" ]]; then
-        # Start monitoring stack
-        docker-compose up -d prometheus grafana elasticsearch logstash kibana
-        
+        # Prometheus/Grafana are behind the monitoring profile.
+        docker compose --profile monitoring up -d prometheus grafana
+
         log_success "Monitoring stack started"
         log_info "Access Grafana at: http://localhost:3001 (admin/admin)"
-        log_info "Access Kibana at: http://localhost:5601"
     elif [[ "$DEPLOYMENT_TYPE" == "kubernetes" ]]; then
-        # Deploy monitoring to Kubernetes
-        kubectl apply -f k8s/monitoring/
-        
+        # The manifests live in a single file, not a directory.
+        kubectl apply -f k8s/monitoring.yaml
+
         log_success "Monitoring deployed to Kubernetes"
     fi
 }
 
 setup_backup() {
     log_info "Setting up backup strategy..."
-    
-    # Create backup script
+
     cat > backup.sh << 'EOF'
 #!/bin/bash
-BACKUP_DIR="/backups/$(date +%Y%m%d_%H%M%S)"
-mkdir -p $BACKUP_DIR
+# Back up the datastores and session data.
+# Requires the datastores to be running:
+#   docker compose --profile databases up -d
+set -euo pipefail
 
-# Backup databases
-docker exec postgres pg_dump -U postgres keke > $BACKUP_DIR/postgres.sql
-docker exec mongodb mongodump --db keke --out $BACKUP_DIR/mongodb
+BACKUP_ROOT="${BACKUP_ROOT:-./backups}"
+STAMP=$(date +%Y%m%d_%H%M%S)
+DEST="${BACKUP_ROOT}/${STAMP}"
+mkdir -p "$DEST"
 
-# Backup uploads
-cp -r uploads $BACKUP_DIR/
+# Resolve the real container names instead of hard-coding 'postgres'/'mongodb'.
+POSTGRES_CONTAINER=$(docker compose ps -q postgres 2>/dev/null || true)
+MONGO_CONTAINER=$(docker compose ps -q mongodb 2>/dev/null || true)
 
-# Backup logs
-cp -r logs $BACKUP_DIR/
+if [[ -n "$POSTGRES_CONTAINER" ]]; then
+    docker exec "$POSTGRES_CONTAINER" pg_dumpall -U postgres > "$DEST/postgres.sql"
+    echo "Backed up PostgreSQL"
+else
+    echo "WARNING: postgres container not running; skipping"
+fi
 
-# Compress backup
-tar -czf $BACKUP_DIR.tar.gz -C /backups $(basename $BACKUP_DIR)
-rm -rf $BACKUP_DIR
+if [[ -n "$MONGO_CONTAINER" ]]; then
+    docker exec "$MONGO_CONTAINER" mongodump --db keke --out /tmp/keke-dump >/dev/null
+    docker cp "$MONGO_CONTAINER":/tmp/keke-dump "$DEST/mongodb"
+    echo "Backed up MongoDB"
+else
+    echo "WARNING: mongodb container not running; skipping"
+fi
 
-echo "Backup completed: $BACKUP_DIR.tar.gz"
+# Session data is the application's actual state.
+if [[ -d data/sessions ]]; then
+    cp -r data/sessions "$DEST/sessions"
+    echo "Backed up session data"
+else
+    echo "WARNING: data/sessions not found; skipping"
+fi
+
+tar -czf "$DEST.tar.gz" -C "$BACKUP_ROOT" "$STAMP"
+rm -rf "$DEST"
+echo "Backup completed: $DEST.tar.gz"
 EOF
-    
+
     chmod +x backup.sh
-    
+
     # Schedule backup cron job
-    (crontab -l 2>/dev/null; echo "0 2 * * * $(pwd)/backup.sh") | crontab -
-    
+    (crontab -l 2>/dev/null; echo "0 2 * * * cd $(pwd) && ./backup.sh") | crontab -
+
     log_success "Backup strategy configured"
 }
 
 health_check() {
     log_info "Performing health check..."
-    
+
     if [[ "$DEPLOYMENT_TYPE" == "docker-compose" ]]; then
-        # Check Docker Compose services
+        # Give the container time to come up before probing.
         sleep 30
-        curl -f http://localhost/health || {
+        # The app publishes 3000 directly; the nginx proxy is an opt-in profile.
+        curl -f "http://localhost:${APP_PORT:-3000}/health" || {
             log_error "Health check failed"
             exit 1
         }
@@ -206,20 +248,29 @@ health_check() {
         # Check Kubernetes services
         kubectl get pods -n ${NAMESPACE}
         kubectl get services -n ${NAMESPACE}
+        kubectl port-forward service/keke-service "${APP_PORT:-3000}:3000" -n ${NAMESPACE} &
+        PF_PID=$!
+        sleep 5
+        curl -f "http://localhost:${APP_PORT:-3000}/health" || {
+            kill "$PF_PID" 2>/dev/null || true
+            log_error "Health check failed"
+            exit 1
+        }
+        kill "$PF_PID" 2>/dev/null || true
     fi
-    
+
     log_success "Health check passed"
 }
 
 cleanup() {
     log_info "Cleaning up..."
-    
+
     if [[ "$DEPLOYMENT_TYPE" == "docker-compose" ]]; then
-        docker-compose down
+        docker compose down --remove-orphans
     elif [[ "$DEPLOYMENT_TYPE" == "kubernetes" ]]; then
         kubectl delete namespace ${NAMESPACE}
     fi
-    
+
     log_success "Cleanup completed"
 }
 
@@ -386,9 +437,8 @@ main() {
     log_success "Deployment completed successfully!"
     
     if [[ "$DEPLOYMENT_TYPE" == "docker-compose" ]]; then
-        log_info "Access the application at: http://localhost"
+        log_info "Access the application at: http://localhost:${APP_PORT:-3000}"
         log_info "Access Grafana at: http://localhost:3001"
-        log_info "Access Kibana at: http://localhost:5601"
     elif [[ "$DEPLOYMENT_TYPE" == "kubernetes" ]]; then
         log_info "Check deployment status: kubectl get pods -n $NAMESPACE"
         log_info "Access the application through your ingress controller"
