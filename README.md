@@ -90,10 +90,32 @@ Primitives: `excel_jobs` / `excel_results` queues, `excel_processing` semaphore 
 
 ```bash
 source .venv/bin/activate
-make test      # npx jest + python -m pytest
+make test      # npx jest + python -m pytest (agentci excluded)
 npx jest       # Node only
-pytest         # Python only
+make test-py   # Python unit/integration only (-m "not agentci")
 ```
+
+### Agentic CI (local Ollama)
+
+Optional LLM-as-judge tests live under `tests/agentci/` and are **excluded** from
+`make test-py` / default CI so a missing Ollama never fails required checks.
+
+```bash
+# Ollama must be reachable (default http://127.0.0.1:11434).
+# Example: docker descent-ollama on :11436 with model qwen2.5:3b
+export OLLAMA_HOST=http://127.0.0.1:11436
+export OLLAMA_JUDGE_MODEL=qwen2.5:3b
+export OPENAI_BASE_URL=http://127.0.0.1:11436/v1
+
+# openai package required for the Assistant exercise (optional otherwise)
+pip install 'openai>=1.0.0'
+
+make test-agentci
+```
+
+`api/assistant.py` honors `OPENAI_BASE_URL` for any OpenAI-compatible endpoint
+(including Ollama `/v1`). When the base URL is localhost and no API key is set,
+the client uses `api_key=ollama`.
 
 ## License
 

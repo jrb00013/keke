@@ -41,9 +41,30 @@ class Assistant:
         self.openai_available = OPENAI_AVAILABLE
         self.anthropic_available = ANTHROPIC_AVAILABLE
 
-        # Initialize AI clients
+        # Initialize AI clients. OPENAI_BASE_URL points at any OpenAI-compatible
+        # endpoint (e.g. local Ollama at http://127.0.0.1:11434/v1). When a
+        # local base URL is set and no key is provided, default the key to
+        # "ollama" so the client can talk to Ollama without a real secret.
         if self.openai_available:
-            self.openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            base_url = os.getenv("OPENAI_BASE_URL") or None
+            api_key = os.getenv("OPENAI_API_KEY")
+            if (
+                not api_key
+                and base_url
+                and ("127.0.0.1" in base_url or "localhost" in base_url)
+            ):
+                api_key = "ollama"
+            client_kwargs = {"api_key": api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            self.openai_client = openai.OpenAI(**client_kwargs)
+            # Prefer an explicit chat model (Ollama tags like qwen2.5:3b);
+            # fall back to the historical OpenAI default.
+            self.openai_model = os.getenv("OPENAI_MODEL") or os.getenv(
+                "OLLAMA_JUDGE_MODEL", "gpt-3.5-turbo"
+            )
+        else:
+            self.openai_model = "gpt-3.5-turbo"
 
         if self.anthropic_available:
             self.anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -171,7 +192,7 @@ class Assistant:
 
             try:
                 response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,
@@ -247,7 +268,7 @@ class Assistant:
 
             try:
                 response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,
@@ -317,7 +338,7 @@ class Assistant:
 
             try:
                 response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,
@@ -387,7 +408,7 @@ class Assistant:
 
             try:
                 response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,
@@ -452,7 +473,7 @@ class Assistant:
 
             try:
                 response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,
@@ -538,7 +559,7 @@ class Assistant:
 
             try:
                 response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,
@@ -631,7 +652,7 @@ class Assistant:
 
             try:
                 response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,
@@ -667,7 +688,7 @@ class Assistant:
 
             try:
                 ai_response = self.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=500,
                     temperature=0.7,

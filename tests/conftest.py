@@ -129,12 +129,18 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "unit: marks tests as unit tests"
     )
+    config.addinivalue_line(
+        "markers",
+        "agentci: agentic CI tests that require a reachable local Ollama "
+        "(deselected by default via make test-py)",
+    )
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection"""
     for item in items:
         # Add unit marker to tests that don't have any marker
-        if not any(marker.name in ['slow', 'integration', 'unit'] for marker in item.iter_markers()):
+        known = {"slow", "integration", "unit", "agentci"}
+        if not any(marker.name in known for marker in item.iter_markers()):
             item.add_marker(pytest.mark.unit)
 
 # Test data generators

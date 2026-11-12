@@ -57,8 +57,14 @@ test-js: ## Run the Node test suite
 	npm test
 
 .PHONY: test-py
-test-py: ## Run the Python test suite
-	$(BIN)/python -m pytest tests/ -q
+test-py: ## Run the Python test suite (excludes agentci / Ollama)
+	$(BIN)/python -m pytest tests/ -q -m "not agentci"
+
+.PHONY: test-agentci
+test-agentci: ## Run agentic CI tests against local Ollama
+	OLLAMA_HOST=$${OLLAMA_HOST:-http://127.0.0.1:11434} \
+	OLLAMA_JUDGE_MODEL=$${OLLAMA_JUDGE_MODEL:-qwen2.5:3b} \
+	$(BIN)/python -m pytest tests/agentci/ -q -m agentci
 
 .PHONY: lint
 lint: lint-js lint-py ## Run all linters
