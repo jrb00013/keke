@@ -67,7 +67,8 @@ jobs:
 
     - name: Run Python tests
       run: |
-        pytest tests/ --cov=api --cov-report=xml
+        # Exclude agentci (needs local Ollama); covered by the optional agentci job.
+        pytest tests/ --cov=api --cov-report=xml -m "not agentci"
 
     - name: Validate Kubernetes manifests
       run: python scripts/validate_k8s.py
@@ -91,6 +92,67 @@ jobs:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
+
+  # =============================================================================
+  # OPTIONAL AGENTIC CI (local / self-hosted Ollama)
+  # =============================================================================
+  # Runs LLM-as-judge tests when Ollama is reachable. On github-hosted runners
+  # there is normally no Ollama, so the job exits 0 after the curl probe.
+  # continue-on-error keeps this from blocking required PR checks if a
+  # self-hosted runner has a flaky Ollama.
+
+  agentci:
+    name: Agent CI (Ollama)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Probe Ollama
+      id: ollama
+      env:
+        OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
+      run: |
+        export OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+        if curl -sf --max-time 3 "${OLLAMA_HOST}/api/tags" >/dev/null; then
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "Ollama reachable at ${OLLAMA_HOST}"
+        else
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          echo "Ollama not reachable at ${OLLAMA_HOST}; skipping agentci"
+        fi
+
+    - name: Set up Python ${{ matrix.python-version }}
+      if: steps.ollama.outputs.available == 'true'
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Python dependencies
+      if: steps.ollama.outputs.available == 'true'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install 'openai>=1.0.0'
+
+    - name: Run agentci tests
+      if: steps.ollama.outputs.available == 'true'
+      env:
+        OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
+        OLLAMA_JUDGE_MODEL: ${{ vars.OLLAMA_JUDGE_MODEL }}
+        OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      run: |
+        export OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+        export OLLAMA_JUDGE_MODEL="${OLLAMA_JUDGE_MODEL:-qwen2.5:3b}"
+        export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${OLLAMA_HOST%/}/v1}"
+        export OPENAI_API_KEY=ollama
+        export OPENAI_MODEL="${OLLAMA_JUDGE_MODEL}"
+        pytest tests/agentci/ -q -m agentci
 
   # =============================================================================
   # SECURITY SCANNING
